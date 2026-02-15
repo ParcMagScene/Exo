@@ -50,7 +50,7 @@ class TTSClient:
     - TTS_TIMEOUT: Timeout in seconds (default: 30)
     """
 
-    def __init__(self, endpoint: str | None = None):
+    def __init__(self, endpoint: Optional[str] = None):
         # ── Moteur préféré ──
         self.preferred_engine = os.environ.get("TTS_ENGINE", "kokoro").lower()
 
@@ -163,7 +163,7 @@ class TTSClient:
 
     async def _speak_kokoro(self, text: str) -> Optional[bytes]:
         """Kokoro TTS local (async wrapper)."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._speak_kokoro_sync, text)
 
     # ─── Piper TTS (local) ─────────────────────────────────
@@ -225,7 +225,7 @@ class TTSClient:
 
     async def _speak_piper(self, text: str) -> Optional[bytes]:
         """Piper TTS local (async wrapper)."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._speak_piper_sync, text)
 
     # ─── OpenAI TTS (API) ──────────────────────────────────
@@ -300,7 +300,7 @@ class TTSClient:
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
                 tmp_path = tmp.name
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None, self._coqui_cache.tts_to_file, text, tmp_path
             )

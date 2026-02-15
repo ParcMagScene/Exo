@@ -34,7 +34,7 @@ class HomeBridge:
         self.ha_token = os.getenv("HA_TOKEN")
         
         if not self.ha_token:
-            raise ValueError("HA_TOKEN requis dans les variables d'environnement")
+            logger.warning("⚠️ HA_TOKEN non configuré — HomeBridge désactivé (mode offline)")
         
         self._ws_connection = None
         self._message_id = 0
@@ -46,14 +46,17 @@ class HomeBridge:
     async def connect(self):
         """Établit la connexion WebSocket à Home Assistant."""
         if not HAS_DEPS:
-            logger.error("Dépendances manquantes")
+            logger.error("Dépendances manquantes (aiohttp/websockets)")
+            return
+        
+        if not self.ha_token:
+            logger.warning("Pas de HA_TOKEN — connexion HA ignorée")
             return
         
         try:
             ws_url = self.ha_url.replace("http", "ws").rstrip("/") + "/api/websocket"
             
-            async with aiohttp.ClientSession() as session:
-                self._ws_connection = await websockets.connect(ws_url)
+            self._ws_connection = await websockets.connect(ws_url)
             
             # Authentification
             auth_msg = await self._ws_connection.recv()
@@ -202,15 +205,9 @@ class HomeBridge:
         brightness = args.get("brightness")
         color = args.get("color")
         
-        # Mapper pièce -> entity_id
-        entity_map = {
-            "salon": "light.salon_hue",
-            "chambre": "light.chambre_hue",
-            "cuisine": "light.cuisine_ikea",
-            "salle_bain": "light.salle_bain_hue",
-        }
-        
-        entity_id = entity_map.get(room, f"light.{room.lower().replace(' ', '_')}")
+        # Mapper pièce -> entity_id (centralisé dans Config)
+        from src.config import Config
+        entity_id = Config.ROOMS_MAP.get(room, f"light.{room.lower().replace(' ', '_')}")
         
         service_data = {"entity_id": entity_id}
         

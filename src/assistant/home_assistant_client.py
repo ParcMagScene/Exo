@@ -1,6 +1,6 @@
 import os
 import aiohttp
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 class HomeAssistantClient:
@@ -9,7 +9,7 @@ class HomeAssistantClient:
     Uses `HA_URL` and `HA_TOKEN` environment variables.
     """
 
-    def __init__(self, base_url: str | None = None, token: str | None = None):
+    def __init__(self, base_url: Optional[str] = None, token: Optional[str] = None):
         self.base_url = base_url or os.environ.get("HA_URL")
         self.token = token or os.environ.get("HA_TOKEN")
         if not self.base_url or not self.token:
@@ -25,8 +25,8 @@ class HomeAssistantClient:
                     raise RuntimeError(f"HA service call failed: {resp.status} {text}")
                 return await resp.json()
 
-    async def set_light(self, entity_id: str, on: bool = True, brightness: int | None = None, color_name: str | None = None):
-        data = {"entity_id": entity_id, "is_on": on} if False else {"entity_id": entity_id}
+    async def set_light(self, entity_id: str, on: bool = True, brightness: Optional[int] = None, color_name: Optional[str] = None):
+        data: Dict[str, Any] = {"entity_id": entity_id}
         if on:
             service = "turn_on"
             if brightness is not None:

@@ -80,22 +80,24 @@ class Config:
     CONVERSATION_HISTORY_SIZE: int = 50  # Contexte étendu pour vraies conversations
     RAG_TOP_K: int = 5  # Plus de contexte personnalisé
 
-    # Mapping pièces
-    ROOMS_MAP: Dict[str, str] = {
+    # Mapping pièces (immutable, utiliser load_custom_rooms pour modifier)
+    _DEFAULT_ROOMS: Dict[str, str] = {
         "salon": "light.salon_hue",
         "chambre": "light.chambre_hue",
         "cuisine": "light.cuisine_ikea",
         "salle_bain": "light.salle_bain_hue",
     }
+    ROOMS_MAP: Dict[str, str] = dict(_DEFAULT_ROOMS)
 
     @classmethod
     def validate(cls) -> bool:
         """Valide la configuration requise."""
-        required = ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_KEY", "HA_URL", "HA_TOKEN"]
-        missing = [k for k in required if not getattr(cls, k, None)]
-
-        if missing:
-            print(f"⚠️ Configuration manquante: {', '.join(missing)}")
+        # Au moins une API OpenAI doit être configurée
+        has_openai = bool(os.getenv("OPENAI_API_KEY"))
+        has_azure = bool(cls.AZURE_OPENAI_KEY and cls.AZURE_OPENAI_KEY != "")
+        
+        if not has_openai and not has_azure:
+            print("⚠️ Aucune clé API configurée (OPENAI_API_KEY ou AZURE_OPENAI_KEY)")
             print("Copier .env.example en .env et remplir les valeurs")
             return False
 

@@ -53,7 +53,7 @@ class HardwareAccelerator:
 
     async def initialize(self):
         """Initialisation asynchrone des ressources."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         
         # Charger Faster-Whisper avec OpenVINO si dispo
         if HAS_WHISPER:
@@ -83,7 +83,7 @@ class HardwareAccelerator:
             if not torch.cuda.is_available():
                 device = "cpu"
                 logger.info("ℹ️ GPU CUDA non disponible, utilisation CPU")
-        except:
+        except ImportError:
             device = "cpu"
         
         self.device = device
@@ -114,7 +114,7 @@ class HardwareAccelerator:
             return ""
         
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             
             # Transcrire dans executor
             segments, info = await loop.run_in_executor(
@@ -180,7 +180,7 @@ class HardwareAccelerator:
             return None
         
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             
             audio_data = await loop.run_in_executor(
                 None,
@@ -262,7 +262,7 @@ class HardwareAccelerator:
                 
                 start = time.time()
                 # Exécuter une fois pour warm-up
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, self._transcribe_sync, dummy_audio.tobytes())
                 elapsed = time.time() - start
                 

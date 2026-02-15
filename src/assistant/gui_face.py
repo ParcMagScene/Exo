@@ -5,8 +5,9 @@ import asyncio
 class FaceState(Enum):
     IDLE = "idle"
     LISTENING = "listening"
-    THINKING = "thinking"
-    SPEAKING = "speaking"
+    PROCESSING = "processing"   # was THINKING
+    RESPONDING = "responding"   # was SPEAKING
+    ERROR = "error"
 
 
 class FaceController:

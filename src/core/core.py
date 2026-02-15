@@ -44,6 +44,10 @@ class AudioFrame:
     session_id: str
     priority: int = 0  # 0=normal, 1=haute priorité
 
+    def __lt__(self, other: 'AudioFrame') -> bool:
+        """Comparaison pour PriorityQueue (timestamp plus ancien = prioritaire)."""
+        return self.timestamp < other.timestamp
+
 
 @dataclass
 class CommandContext:
@@ -197,6 +201,9 @@ class AssistantCore:
                     logger.warning("⚠️ Transcription échouée ou vide")
                     continue
                 
+                # Passer en mode PROCESSING
+                self.state = AssistantState.PROCESSING
+                
                 # Créer un contexte de commande
                 ctx = CommandContext(
                     user_input=transcript,
@@ -260,7 +267,13 @@ class AssistantCore:
                             if response.get("text"):
                                 if self.face_gui:
                                     await self.face_gui.set_state(AssistantState.RESPONDING)
-                                # await self.hardware_accel.text_to_speech(response["text"])
+                                try:
+                                    from ..assistant.tts_client import TTSClient
+                                    tts = TTSClient()
+                                    audio = await tts.speak(response["text"])
+                                    logger.info(f"🔊 TTS réponse: {len(audio)//1024}KB")
+                                except Exception as e:
+                                    logger.error(f"Erreur TTS: {e}")
                         
                         # Nettoyage
                         del self.active_sessions[session_id]

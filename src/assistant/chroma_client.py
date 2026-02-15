@@ -19,7 +19,7 @@ class ChromaClient:
     def __init__(self, collection_name: str = "personal_context"):
         if chromadb is None:
             raise RuntimeError("chromadb not available; install chromadb package")
-        self.client = chromadb.Client()
+        self.client = chromadb.PersistentClient(path="./data/chroma")
         self.collection = self.client.get_or_create_collection(name=collection_name)
 
     async def query(self, text: str, top_k: int = 3) -> List[str]:

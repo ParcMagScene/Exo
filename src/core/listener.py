@@ -73,7 +73,7 @@ class ExoListener:
         logger.info("Chargement Faster-Whisper (%s)...", self.whisper_model_name)
         from faster_whisper import WhisperModel  # type: ignore
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         self._whisper = await loop.run_in_executor(
             None,
             lambda: WhisperModel(
@@ -255,7 +255,7 @@ class ExoListener:
 
         await self._init_all()
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         logger.info("")
         logger.info("👂 En écoute permanente — dites « Exo » pour activer.")

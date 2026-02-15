@@ -123,7 +123,7 @@ class AudioCapture:
                 raise RuntimeError("Flux audio non initialisé")
             
             # Lire async avec timeout court
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             stream = self.stream  # Capturer dans une variable locale pour type checking
             data = await asyncio.wait_for(
                 loop.run_in_executor(

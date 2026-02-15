@@ -29,8 +29,10 @@ class DisplayInfo:
     
     @property
     def is_touchscreen(self) -> bool:
-        """Heuristique: écrans plus larges que hauts (paysage) sont probablement tactiles."""
-        return self.width > self.height
+        """Heuristique: écran petit (<= 10\") est probablement tactile."""
+        diagonal_px = (self.width**2 + self.height**2) ** 0.5
+        # 96 DPI heuristique → moins de ~1000px de diagonale ≈ petit écran
+        return diagonal_px < 1200 or (self.width <= 1024 and self.height <= 800)
 
 
 def detect_displays() -> List[DisplayInfo]:
@@ -86,9 +88,9 @@ def detect_displays() -> List[DisplayInfo]:
                             'x': 0,
                             'y': 0
                         })
-                    except:
+                    except Exception:
                         pass
-        except:
+        except Exception:
             pass
         
         # Si rien détecté, utiliser les infos de Pygame standard

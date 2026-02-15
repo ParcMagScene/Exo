@@ -59,6 +59,9 @@ class FaceGUI:
         # Audio spectrum
         self.audio_spectrum = [0] * 32
         
+        # Cached font (initialized once)
+        self._font = None
+        
         logger.info(f"✅ FaceGUI initialisé ({width}x{height} @ {fps}Hz)")
 
     async def initialize(self):
@@ -214,9 +217,11 @@ class FaceGUI:
         """Affiche le statut actuel."""
         status_text = f"État: {self.state.value.upper()}"
         
-        if HAS_PYGAME and pygame.freetype.init() and self.screen:
-            font = pygame.freetype.SysFont("monospace", 14)
-            text_surf, rect = font.render(status_text, (150, 150, 150))
+        if HAS_PYGAME and self.screen:
+            if self._font is None:
+                pygame.freetype.init()
+                self._font = pygame.freetype.SysFont("monospace", 14)
+            text_surf, rect = self._font.render(status_text, (150, 150, 150))
             self.screen.blit(text_surf, (10, 10))
 
     def _render_spectrum(self):

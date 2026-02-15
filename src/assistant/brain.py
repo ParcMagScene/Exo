@@ -1,56 +1,63 @@
+"""Legacy Brain — DEPRECATED. Utilisez src.brain.brain_engine.BrainEngine à la place.
+
+Ce module est conservé uniquement pour compatibilité avec les exemples de test.
+Il ne fait PAS partie du pipeline principal (main.py → listener.py → BrainEngine).
+"""
+
 import os
 import asyncio
 import logging
 from typing import Optional, Dict, Any
 
 from .chroma_client import ChromaClient
-from .home_assistant_client import HomeAssistantClient
 from .tts_client import TTSClient
 from .gui_face import FaceController, FaceState
 
 logger = logging.getLogger(__name__)
 
+# Client OpenAI standard (pas Azure SDK inexistant)
 try:
-    from azure.ai.openai.aio import OpenAIClient
-except Exception:
-    OpenAIClient = None
+    from openai import AsyncOpenAI  # type: ignore
+    HAS_OPENAI = True
+except ImportError:
+    HAS_OPENAI = False
+    logger.warning("openai SDK non disponible")
 
 
 class Brain:
-    """Central assistant 'Brain'.
+    """Legacy Brain — wrapper simplifié pour les exemples.
 
-    Responsibilities:
-    - recevoir texte transcrit
-    - enrichir avec contexte depuis ChromaDB
-    - envoyer prompt à GPT-4o via Azure AI SDK (async)
-    - gérer function-calls pour Home Assistant
-    - envoyer texte au moteur TTS
-    - mettre à jour l'état du visage 2D (IDLE, LISTENING, THINKING, SPEAKING)
+    DEPRECATED: Utiliser BrainEngine pour le pipeline principal.
     """
 
     def __init__(self,
                  chroma_collection: str = "personal_context",
                  face: Optional[FaceController] = None):
         self.chroma = ChromaClient(collection_name=chroma_collection)
-        self.ha = HomeAssistantClient()
+
+        # HomeAssistantClient conditionnel (ne crashe plus sans HA_TOKEN)
+        self.ha = None
+        try:
+            from .home_assistant_client import HomeAssistantClient
+            self.ha = HomeAssistantClient()
+        except Exception as e:
+            logger.warning(f"HomeAssistantClient non disponible: {e}")
+
         self.tts = TTSClient()
         self.face = face or FaceController()
 
-        self.azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
-        self.azure_key = os.environ.get("AZURE_OPENAI_KEY")
-        self.deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
+        # OpenAI standard (pas Azure)
+        self.openai_key = os.environ.get("OPENAI_API_KEY", "")
+        self.model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
-        if OpenAIClient is None:
-            # graceful: we will try to call via httpx if SDK not installed
-            self._use_sdk = False
-        else:
-            self._use_sdk = True
-            self._client = OpenAIClient(self.azure_endpoint, credential=self.azure_key)
+        self._client: Optional[AsyncOpenAI] = None
+        if HAS_OPENAI and self.openai_key:
+            self._client = AsyncOpenAI(api_key=self.openai_key)
 
     async def handle_text(self, text: str):
         await self.face.set_state(FaceState.LISTENING)
         await asyncio.sleep(0.05)
-        await self.face.set_state(FaceState.THINKING)
+        await self.face.set_state(FaceState.PROCESSING)
 
         context_snippets = await self.chroma.query(text, top_k=3)
 
@@ -71,7 +78,7 @@ class Brain:
         else:
             reply_text = response if isinstance(response, str) else response.get("content", "")
 
-        await self.face.set_state(FaceState.SPEAKING)
+        await self.face.set_state(FaceState.RESPONDING)
         await self._speak_with_retry(reply_text)
         await asyncio.sleep(0.1)
         await self.face.set_state(FaceState.IDLE)
@@ -97,38 +104,47 @@ class Brain:
         """Call GPT-4o with retry logic on transient failures."""
         for attempt in range(retries + 1):
             try:
-                # Prefer SDK if available
-                if self._use_sdk and self._client:
-                    # sdk usage - simplified for clarity
+                if self._client:
                     completion = await self._client.chat.completions.create(
-                        deployment=self.deployment,
+                        model=self.model,
                         messages=messages,
                         max_tokens=800,
                         temperature=0.6,
-                        # request function-calling style payloads via instructions in system role
                     )
                     choice = completion.choices[0]
-                    # Azure SDK chat response shape may vary; try to extract function_call
-                    func_call = getattr(choice, "function_call", None)
-                    if func_call:
-                        return {"function_call": {"name": func_call.name, "arguments": func_call.arguments}, "content": choice.message.get("content")}
-                    return choice.message.get("content")
+                    tool_calls = getattr(choice.message, "tool_calls", None)
+                    if tool_calls:
+                        tc = tool_calls[0]
+                        return {
+                            "function_call": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                            "content": choice.message.content,
+                        }
+                    return choice.message.content or ""
 
-                # Fallback: simple REST call using httpx
-                import httpx
-                url = f"{self.azure_endpoint.rstrip('/')}/openai/deployments/{self.deployment}/chat/completions?api-version=2023-05-15"
-                headers = {"api-key": self.azure_key, "Content-Type": "application/json"}
-                payload = {"messages": messages, "max_tokens": 800, "temperature": 0.6}
-                async with httpx.AsyncClient() as client:
-                    r = await client.post(url, json=payload, headers=headers, timeout=30.0)
-                    r.raise_for_status()
-                    data = r.json()
-                    choice = data.get("choices", [])[0]
-                    msg = choice.get("message", {})
-                    # Some endpoints may include function_call inside message
-                    if msg.get("function_call"):
-                        return {"function_call": msg.get("function_call"), "content": msg.get("content")}
-                    return msg.get("content")
+                # Fallback: REST direct via aiohttp
+                import aiohttp
+                url = "https://api.openai.com/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {self.openai_key}",
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model": self.model,
+                    "messages": messages,
+                    "max_tokens": 800,
+                    "temperature": 0.6,
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as r:
+                        r.raise_for_status()
+                        data = await r.json()
+                        msg = data["choices"][0]["message"]
+                        if msg.get("function_call"):
+                            return {"function_call": msg["function_call"], "content": msg.get("content")}
+                        return msg.get("content", "")
             except asyncio.TimeoutError:
                 logger.warning(f"GPT timeout (attempt {attempt + 1}/{retries + 1})")
                 if attempt < retries:
@@ -148,6 +164,10 @@ class Brain:
         """Execute function calls from GPT with error handling."""
         name = function_call.get("name")
         args = function_call.get("arguments") or {}
+        
+        if not self.ha:
+            logger.warning(f"Function call '{name}' ignoré — HomeAssistant non configuré")
+            return
         
         try:
             # Basic mapping: light control

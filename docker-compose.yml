@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Réseau partagé pour communication inter-services
 networks:
   assistant-net:
@@ -93,11 +91,11 @@ services:
         ipv4_address: 172.20.0.2
     
     healthcheck:
-      test: ["CMD", "python", "-c", "import asyncio; asyncio.run(asyncio.sleep(0))"]
-      interval: 10s
+      test: ["CMD", "python", "-c", "import os, sys; sys.exit(0 if os.path.exists('/app/main.py') else 1)"]
+      interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 30s
     
     # Redémarrage automatique
     restart: unless-stopped

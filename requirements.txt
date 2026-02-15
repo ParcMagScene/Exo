@@ -1,42 +1,27 @@
 # Assistant Personnel Haut de Gamme - Dépendances Python
 
 # Async & Networking
-aiohttp==3.9.1
-asyncio-contextmanager==1.0.1
-websockets==12.0
+aiohttp>=3.9.1
+websockets>=12.0
 
 # OpenAI SDK (GPT-4o)
-openai==1.3.0
-
-# Azure Authentication
-azure-identity==1.14.0
+openai>=1.12.0
 
 # Vector Database (RAG)
-chromadb==0.4.9
+chromadb>=0.4.9
 
 # STT/TTS
-faster-whisper==0.10.0
-requests==2.31.0
+faster-whisper>=0.10.0
+requests>=2.31.0
 kokoro>=0.9.2            # Kokoro TTS (haute qualité, local, Apache 2.0)
-soundfile==0.12.1        # Audio file I/O (requis par Kokoro)
-TTS==0.21.1              # Coqui TTS (XTTS v2 fallback)
+soundfile>=0.12.1        # Audio file I/O (requis par Kokoro)
 
 # GUI
-pygame==2.5.2
-numpy==1.24.3
-
-# Hardware Acceleration
-openvino==2024.0.0
-# torch==2.1.0  # OPTIONAL - GPU support, use if needed
+pygame>=2.5.2
+numpy>=1.24.3
 
 # Environment
-python-dotenv==1.0.0
-aiofiles==23.2.1
-
-# Performance
-# uvloop==0.17.0  # OPTIONAL - Not supported on Windows
+python-dotenv>=1.0.0
 
 # Utils
-colorlog==6.7.0
-pydantic==2.4.2
-pydub==0.25.1
+pydub>=0.25.1

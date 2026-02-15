@@ -151,16 +151,13 @@ class WyomingServer:
                     
                     frame = WyomingAudioFrame(
                         timestamp=data.get("timestamp", 0),
-                        room=room_str,
+                        room=room_enum.value,
                         audio_bytes=audio_part,
                         session_id=data.get("session_id", client_id),
                         format=data.get("format", "pcm16"),
                         rate=data.get("rate", 16000),
                         channels=data.get("channels", 1)
                     )
-                    
-                    # Convertir la room string en enum pour la frame
-                    frame.room = room_enum.value
                     
                     await self.on_audio_frame(frame)
                     logger.debug(f"🎵 Cadre audio: {len(audio_part)} bytes")
@@ -206,7 +203,7 @@ class WyomingServer:
         for client_id, ws in list(self.clients.items()):
             try:
                 await ws.close()
-            except:
+            except Exception:
                 pass
         
         if self.server:
