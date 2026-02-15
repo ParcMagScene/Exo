@@ -1,0 +1,241 @@
+version: '3.8'
+
+# Réseau partagé pour communication inter-services
+networks:
+  assistant-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volumes persistants
+volumes:
+  homeassistant_config:
+  fish-speech-models:
+  chroma-db:
+  mopidy-config:
+
+services:
+  # ==================== SERVEUR CENTRAL ASSISTANT ====================
+  assistant:
+    build: .
+    container_name: assistant-core
+    image: assistant-personal:latest
+    hostname: assistant
+    
+    # Ports exposés
+    ports:
+      - "8080:8080"        # API RESTful futur
+      - "10700:10700"       # Wyoming Protocol (audio)
+    
+    # Variables d'environnement
+    environment:
+      # Azure OpenAI (GPT-4o)
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-https://your-resource.openai.azure.com/}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY:-key-here}
+      - AZURE_OPENAI_DEPLOYMENT=gpt-4o
+      - AZURE_OPENAI_MODEL=gpt-4o
+      
+      # Home Assistant
+      - HA_URL=http://homeassistant:8123
+      - HA_TOKEN=${HA_TOKEN:-token-here}
+      
+      # Optimisations LLM
+      - LLM_TEMPERATURE=0.6
+      - LLM_MAX_TOKENS=2000
+      - CONVERSATION_HISTORY_SIZE=50
+      
+      # Hardware
+      - DEVICE=cpu  # Sur Docker: utiliser CPU (pas CUDA par défaut)
+      - WHISPER_WORKERS=4
+      - WHISPER_MODEL=base
+      
+      # TTS - Kokoro (Primary) + Piper + Fish-Speech + XTTS v2 Fallback
+      - TTS_ENGINE=kokoro
+      - KOKORO_VOICE=ff_siwis
+      - KOKORO_LANG=f
+      - KOKORO_ENABLED=true
+      - FISH_SPEECH_URL=http://fish-speech:8000
+      - TTS_FALLBACK=true
+      - XTTS_DEVICE=auto
+      - TTS_TIMEOUT=30
+      - TTS_RETRIES=2
+      
+      # Music
+      - MOPIDY_URL=http://mopidy:6680
+      
+      # Logging
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+      
+      # Wyoming
+      - WYOMING_HOST=0.0.0.0
+      - WYOMING_PORT=10700
+    
+    # Volumes (persistance)
+    volumes:
+      - ./data/chroma:/app/data/chroma              # ChromaDB RAG storage
+      - ./data/cache:/app/data/cache                # Cache LLM/models
+      - ./assistant.log:/app/assistant.log          # Logs
+    
+    # Dépendances de démarrage
+    depends_on:
+      homeassistant:
+        condition: service_healthy
+      fish-speech:
+        condition: service_healthy
+      mopidy:
+        condition: service_started
+    
+    # Réseau et santé
+    networks:
+      assistant-net:
+        ipv4_address: 172.20.0.2
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import asyncio; asyncio.run(asyncio.sleep(0))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    
+    # Redémarrage automatique
+    restart: unless-stopped
+
+
+  # ==================== HOME ASSISTANT ====================
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:latest
+    container_name: homeassistant
+    hostname: homeassistant
+    privileged: true
+    
+    environment:
+      TZ: Europe/Paris
+      LANG: fr_FR.UTF-8
+    
+    volumes:
+      - homeassistant_config:/config
+      - /etc/localtime:/etc/localtime:ro
+    
+    ports:
+      - "8123:8123"                # HTTP interface
+      - "5353:5353/udp"            # mDNS
+    
+    networks:
+      assistant-net:
+        ipv4_address: 172.20.0.3
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    
+    restart: unless-stopped
+
+
+  # ==================== FISH-SPEECH TTS ====================
+  fish-speech:
+    image: fish-audio/fish-speech:latest
+    container_name: fish-speech
+    hostname: fish-speech
+    
+    environment:
+      LANG: fr_FR.UTF-8
+      # Port de service interne
+      SERVICE_PORT: 8000
+    
+    volumes:
+      - fish-speech-models:/app/models
+    
+    ports:
+      - "8000:8000"                # TTS REST API
+    
+    networks:
+      assistant-net:
+        ipv4_address: 172.20.0.4
+    
+    # Resource limits (TTS peut être lourd)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    restart: unless-stopped
+
+
+  # ==================== MOPIDY MUSIC STREAMING ====================
+  mopidy:
+    image: mopidy/mopidy:latest
+    container_name: mopidy
+    hostname: mopidy
+    
+    environment:
+      MOPIDY_HTTP_ENABLED: 'true'
+      MOPIDY_HTTP_HOSTNAME: 0.0.0.0
+      MOPIDY_HTTP_PORT: 6680
+    
+    volumes:
+      - mopidy-config:/config
+      - /tmp/mopidy:/tmp
+    
+    ports:
+      - "6680:6680"               # HTTP API
+      - "6681:6681"               # WebSocket
+    
+    networks:
+      assistant-net:
+        ipv4_address: 172.20.0.5
+    
+    restart: unless-stopped
+
+
+  # ==================== CHROMADB (optionnel, si pas volume local) ====================
+  # chromadb:
+  #   image: chromadb/chroma:latest
+  #   container_name: chromadb
+  #   hostname: chromadb
+  #   
+  #   ports:
+  #     - "8888:8000"
+  #   
+  #   volumes:
+  #     - chroma-db:/chroma/data
+  #   
+  #   networks:
+  #     assistant-net:
+  #       ipv4_address: 172.20.0.6
+  #   
+  #   restart: unless-stopped
+
+
+# ==================== COMMANDES DE GESTION ====================
+# 
+# Démarrer tout:
+#   docker-compose up -d
+# 
+# Logs en temps réel:
+#   docker-compose logs -f assistant
+# 
+# Arrêter:
+#   docker-compose down
+# 
+# Rebuild image:
+#   docker-compose build --no-cache
+# 
+# Accéder à services:
+#   - Assistant: http://localhost:10700 (Wyoming)
+#   - Home Assistant: http://localhost:8123
+#   - Fish-Speech: http://localhost:8000
+#   - Mopidy: http://localhost:6680
+

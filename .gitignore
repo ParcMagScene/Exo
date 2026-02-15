@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment (contient des clés API !)
+.env
+
+# Logs
+*.log
+
+# Data / DB
+data/chroma/
+data/cache/
+
+# Models (trop gros pour git)
+models/piper/*.onnx
+models/piper/*.onnx.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test artifacts
+test_kokoro.wav
