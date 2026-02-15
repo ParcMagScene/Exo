@@ -49,9 +49,9 @@ async def main():
         help="Index du micro PyAudio (None = défaut système)"
     )
     parser.add_argument(
-        "--whisper", type=str, default="small",
+        "--whisper", type=str, default="base",
         choices=["tiny", "base", "small", "medium", "large-v3"],
-        help="Taille du modèle Whisper (défaut: small)"
+        help="Taille du modèle Whisper (défaut: base)"
     )
     args = parser.parse_args()
 

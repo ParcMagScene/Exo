@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # ─── Configuration streaming ─────────────────────────────
 TRANSCRIBE_INTERVAL_SEC = 1.0   # Intervalle min entre soumissions Whisper
-REUSE_VOICE_THRESHOLD = 3       # Si < N chunks vocaux dans le tail → réutiliser
+REUSE_VOICE_THRESHOLD = 6       # Si < N chunks vocaux dans le tail → réutiliser (≈0.4s)
 
 
 def _transcribe_buffer(whisper_model, audio_bytes: bytes) -> str:
@@ -45,9 +45,10 @@ def _transcribe_buffer(whisper_model, audio_bytes: bytes) -> str:
         return ""
     segments, _ = whisper_model.transcribe(
         samples, language="fr", beam_size=1,
-        no_speech_threshold=0.85,   # Relevé (défaut 0.6) pour ne pas filtrer les mots courts
-        log_prob_threshold=-1.5,     # Plus tolérant sur la qualité de transcription
-        vad_filter=False,            # On fait déjà notre propre VAD
+        no_speech_threshold=0.85,
+        log_prob_threshold=-1.5,
+        vad_filter=False,
+        condition_on_previous_text=False,  # Évite dérives, accélère
     )
     return " ".join(seg.text for seg in segments).strip()
 

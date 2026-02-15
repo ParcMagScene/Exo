@@ -30,7 +30,7 @@ DEFAULT_DEVICE_INDEX = None      # None = micro par défaut du système
 SAMPLE_RATE = 16000
 CHUNK_SIZE = 1024
 CHANNELS = 1
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")  # "base" = bon compromis vitesse/précision FR
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")  # "base" = rapide sur CPU, bon FR
 FOLLOWUP_TIMEOUT_SEC = 7.0      # Attente après "Exo" seul (généreux)
 
 
@@ -161,6 +161,7 @@ class ExoListener:
             no_speech_threshold=0.85,
             log_prob_threshold=-1.5,
             vad_filter=False,
+            condition_on_previous_text=False,
         )
         return " ".join(seg.text for seg in segments).strip()
 
