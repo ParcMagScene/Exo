@@ -255,15 +255,13 @@ class ExoListener:
     async def start(self):
         """Lance la boucle d'écoute permanente. Bloque jusqu'à Ctrl+C."""
         from src.audio.wake_word import (
-            capture_utterance,
             contains_wake_word,
             extract_command_after_wake,
             is_hallucination,
         )
+        from src.audio.streaming_stt import streaming_capture_and_transcribe
 
         await self._init_all()
-
-        loop = asyncio.get_running_loop()
 
         logger.info("")
         logger.info("👂 En écoute permanente — dites « Exo » pour activer.")
@@ -272,26 +270,13 @@ class ExoListener:
 
         try:
             while True:
-                # ── Étape 1 : Capturer une utterance ──────
-                t0_capture = time.time()
-                utterance = await capture_utterance(
+                # ── Étape 1+2 : Capture + Transcription streaming ──
+                transcript, utterance, timing = await streaming_capture_and_transcribe(
                     self._stream,
+                    self._whisper,
                     sample_rate=SAMPLE_RATE,
                     chunk_size=CHUNK_SIZE,
                 )
-
-                if not utterance:
-                    continue  # Bruit trop court
-
-                capture_time = time.time() - t0_capture
-                duration = len(utterance) / (SAMPLE_RATE * 2)
-
-                # ── Étape 2 : Transcrire ──────────────────
-                t0_stt = time.time()
-                transcript = await loop.run_in_executor(
-                    None, self._transcribe, utterance
-                )
-                stt_time = time.time() - t0_stt
 
                 if not transcript:
                     continue
@@ -301,8 +286,11 @@ class ExoListener:
                     logger.debug("Hallucination filtrée : « %s »", transcript)
                     continue
 
-                logger.info("📝 Entendu : « %s » (capture=%.2fs, audio=%.1fs, STT=%.2fs)",
-                            transcript, capture_time, duration, stt_time)
+                reused_tag = " ⚡réutilisé" if timing.get("reused") else ""
+                logger.info("📝 Entendu : « %s » (capture=%.2fs, audio=%.1fs, STT=%.2fs%s)",
+                            transcript, timing.get("capture_sec", 0),
+                            timing.get("audio_sec", 0), timing.get("stt_sec", 0),
+                            reused_tag)
 
                 # ── Étape 3 : Wake word ? ─────────────────
                 if not contains_wake_word(transcript):
@@ -327,33 +315,26 @@ class ExoListener:
                     logger.info("🎤 Parlez maintenant (timeout %ds)...", FOLLOWUP_TIMEOUT_SEC)
 
                     # Retry loop avec timeout réel (évite les faux timeouts par bruit)
-                    followup = b""
+                    followup_text = ""
                     deadline = time.time() + FOLLOWUP_TIMEOUT_SEC
                     while time.time() < deadline:
                         remaining = deadline - time.time()
                         if remaining <= 0:
                             break
-                        followup = await capture_utterance(
+                        text, _, _ = await streaming_capture_and_transcribe(
                             self._stream,
+                            self._whisper,
                             sample_rate=SAMPLE_RATE,
                             chunk_size=CHUNK_SIZE,
                             min_sec=0.3,
                             timeout_sec=remaining,
                         )
-                        if followup:
-                            break  # Vrai audio capturé
-
-                    if not followup:
-                        logger.warning("⏱ Timeout — aucune commande après « Exo »")
-                        logger.info("👂 En écoute...")
-                        continue
-
-                    followup_text = await loop.run_in_executor(
-                        None, self._transcribe, followup
-                    )
+                        if text:
+                            followup_text = text
+                            break  # Vrai audio capturé + transcrit
 
                     if not followup_text:
-                        logger.warning("Commande vide après transcription")
+                        logger.warning("⏱ Timeout — aucune commande après « Exo »")
                         logger.info("👂 En écoute...")
                         continue
 

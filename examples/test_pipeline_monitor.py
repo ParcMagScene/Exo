@@ -133,9 +133,8 @@ async def phase_2_calibration(stream):
 
 
 async def phase_3_capture_and_stt(stream, whisper_model, rounds: int = 5):
-    """Phase 3 : Capture + transcription + wake word."""
+    """Phase 3 : Capture + transcription streaming + wake word."""
     from src.audio.wake_word import (
-        capture_utterance,
         contains_wake_word,
         extract_command_after_wake,
         is_hallucination,
@@ -143,11 +142,13 @@ async def phase_3_capture_and_stt(stream, whisper_model, rounds: int = 5):
         DEFAULT_SILENCE_CHUNKS,
         DEFAULT_MIN_UTTERANCE_SEC,
     )
+    from src.audio.streaming_stt import streaming_capture_and_transcribe
 
     print(f"\n{BOLD}{'═' * 60}")
-    print(f"  PHASE 3 — Capture + Whisper ({rounds} tours)")
+    print(f"  PHASE 3 — Capture + STT streaming ({rounds} tours)")
     print(f"{'═' * 60}{RESET}")
     print(f"  Modèle Whisper : {whisper_model}")
+    print(f"  Mode           : ⚡ Streaming (transcription parallèle)")
     print(f"  Seuil VAD      : {DEFAULT_VOICE_THRESHOLD} (adaptatif activé)")
     print(f"  Silence fin    : {DEFAULT_SILENCE_CHUNKS} chunks (~{DEFAULT_SILENCE_CHUNKS * CHUNK_SIZE / SAMPLE_RATE:.2f}s)")
     print(f"  Min utterance  : {DEFAULT_MIN_UTTERANCE_SEC}s")
@@ -157,7 +158,6 @@ async def phase_3_capture_and_stt(stream, whisper_model, rounds: int = 5):
     # Charger Whisper
     print(f"  ⏳ Chargement Whisper ({whisper_model})...", end="", flush=True)
     from faster_whisper import WhisperModel
-    import numpy as np
 
     t0 = time.time()
     loop = asyncio.get_running_loop()
@@ -167,46 +167,36 @@ async def phase_3_capture_and_stt(stream, whisper_model, rounds: int = 5):
     )
     print(f" OK ({time.time() - t0:.1f}s)")
 
-    def transcribe(audio_bytes: bytes) -> str:
-        samples = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        if len(samples) < 4800:
-            return ""
-        segments, _ = whisper.transcribe(samples, language="fr", beam_size=1)
-        return " ".join(seg.text for seg in segments).strip()
-
     results = []
 
     for i in range(rounds):
         print(f"\n  {CYAN}── Tour {i + 1}/{rounds} ──{RESET}")
         print(f"  👂 En écoute... (parlez maintenant, timeout 15s)")
 
-        # Capture
-        t0_capture = time.time()
-        utterance = await capture_utterance(
+        # Capture + Transcription streaming
+        transcript, utterance, timing = await streaming_capture_and_transcribe(
             stream,
+            whisper,
             sample_rate=SAMPLE_RATE,
             chunk_size=CHUNK_SIZE,
             timeout_sec=15.0,
         )
-        capture_time = time.time() - t0_capture
-
-        if not utterance:
-            print(f"  {YELLOW}⏱  Timeout — aucune voix détectée{RESET}")
-            results.append({"status": "timeout"})
-            continue
-
-        duration = len(utterance) / (SAMPLE_RATE * 2)
-        print(f"  📦 Capturé : {duration:.2f}s audio ({len(utterance) // 1024}KB) en {capture_time:.2f}s")
-
-        # Transcription
-        t0_stt = time.time()
-        transcript = await loop.run_in_executor(None, transcribe, utterance)
-        stt_time = time.time() - t0_stt
 
         if not transcript:
-            print(f"  {YELLOW}✗  Transcription vide{RESET}")
-            results.append({"status": "empty", "capture_time": capture_time, "stt_time": stt_time})
+            if not utterance:
+                print(f"  {YELLOW}⏱  Timeout — aucune voix détectée{RESET}")
+                results.append({"status": "timeout"})
+            else:
+                print(f"  {YELLOW}✗  Transcription vide{RESET}")
+                results.append({"status": "empty"})
             continue
+
+        capture_time = timing.get("capture_sec", 0)
+        stt_time = timing.get("stt_sec", 0)
+        duration = timing.get("audio_sec", 0)
+        reused = timing.get("reused", False)
+
+        print(f"  📦 Capturé : {duration:.2f}s audio ({len(utterance) // 1024}KB)")
 
         # Hallucination ?
         if is_hallucination(transcript):
@@ -215,7 +205,8 @@ async def phase_3_capture_and_stt(stream, whisper_model, rounds: int = 5):
             continue
 
         # Résultat STT
-        print(f"  📝 Transcrit : « {BOLD}{transcript}{RESET} » (STT={stt_time:.2f}s)")
+        reused_tag = f" {GREEN}⚡réutilisé{RESET}" if reused else ""
+        print(f"  📝 Transcrit : « {BOLD}{transcript}{RESET} » (STT={stt_time:.2f}s{reused_tag})")
 
         # Wake word ?
         has_wake = contains_wake_word(transcript)
