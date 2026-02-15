@@ -1,362 +1,368 @@
-# 📚 Guide d'Installation Complète
+# 📦 Installation & Déploiement
 
-## 🖥️ Système Requis
+Guide complet pour installer EXO sur PC, Raspberry Pi et Docker.
 
-### Serveur Central (PC)
-- **OS** : Windows 10/11 ou Linux (Ubuntu 20.04+)
-- **CPU** : Intel i9-11900KF (ou équivalent)
-- **RAM** : 48 Go recommandé
-- **GPU** : AMD Radeon RX 6750 XT (optionnel mais recommandé)
-- **Python** : 3.11+
+---
 
-### Satellites (Raspberry Pi)
-- **Pi Zero 2 W** : STT
-- **Pi 5** : STT + GUI optionnelle
-- **Système** : Raspberry Pi OS (Bookworm)
+## Table des matières
 
-### Domotique
-- **Home Assistant** : v2024.1+ (contener Docker ou installation native)
-- **Devices** : Philips Hue, IKEA, Samsung, EZWIZ, Petkit
+- [Prérequis](#-prérequis)
+- [Installation PC](#1%EF%B8%8F⃣-installation-pc)
+- [Raspberry Pi (satellites)](#2%EF%B8%8F⃣-raspberry-pi-satellites)
+- [Docker](#3%EF%B8%8F⃣-docker)
+- [Troubleshooting](#-troubleshooting)
 
-## 1️⃣ Installation Serveur Central (PC)
+---
 
-### Étape 1 : Cloner le projet
+## 🖥️ Prérequis
 
-```bash
-git clone <repo-url> assistant
-cd assistant
-```
+| Composant | Serveur PC | Satellite Pi |
+|-----------|-----------|-------------|
+| OS | Windows 10/11 ou Linux | Raspberry Pi OS (64-bit) |
+| Python | 3.11+ | 3.9+ |
+| RAM | 16 Go+ (48 Go recommandé) | 512 Mo+ |
+| GPU | Optionnel (AMD/NVIDIA) | Non requis |
+| Réseau | LAN | WiFi ou Ethernet |
 
-### Étape 2 : Environnement Python
+---
 
-#### Windows
-```bash
-# Créer virtualenv
-python -m venv venv
-venv\Scripts\activate
+## 1️⃣ Installation PC
 
-# Vérifier Python
-python --version  # Doit afficher 3.11+
-```
-
-#### Linux/Mac
-```bash
-python3 -m venv venv
-source venv/bin/activate
-python3 --version
-```
-
-### Étape 3 : Installer les dépendances
+### Cloner et configurer
 
 ```bash
-# Upgrade pip/setuptools
+git clone <repo-url> Exo
+cd Exo
+
+# Virtual env
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # Linux/Mac
+
+# Dépendances
 pip install --upgrade pip setuptools wheel
-
-# Installer dépendances
 pip install -r requirements.txt
 ```
 
-> **⚠️ Note GPU** : Pour CUDA (NVIDIA), ajouter :
-> ```bash
-> pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-> ```
+> **GPU NVIDIA** : `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118`
 
-### Étape 4 : Configuration (.env)
+### Configuration .env
 
 ```bash
-# Copier le fichier exemple
-cp .env.example .env  # Linux/Mac
-copy .env.example .env  # Windows
-
-# Éditer avec votre éditeur
+copy .env.example .env          # Windows
+# cp .env.example .env          # Linux
 ```
 
-**Remplir au minimum** :
+**Minimum requis** :
+
 ```env
-# Azure OpenAI (obligatoire)
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_KEY=sk-...
-AZURE_OPENAI_DEPLOYMENT=gpt-4o
-
-# Home Assistant
-HA_URL=http://192.168.1.100:8123  # Adapter à votre réseau
-HA_TOKEN=eyJ0eXAi...              # Long-lived token HA
+OPENAI_API_KEY=sk-...
 ```
 
-### Étape 5 : Setup Home Assistant
+**Avec domotique** :
 
-#### Option A : Docker (Recommandé)
-```bash
-docker run -d \
-  --name homeassistant \
-  -p 8123:8123 \
-  -v /path/to/config:/config \
-  ghcr.io/home-assistant/home-assistant:latest
+```env
+OPENAI_API_KEY=sk-...
+HA_URL=http://192.168.1.100:8123
+HA_TOKEN=eyJ0eXAi...
 ```
 
-Puis acceder à http://localhost:8123 et suivre l'assistant.
+Voir le [README.md](README.md#-variables-denvironnement) pour la liste complète.
 
-#### Option B : Installation Native
-```bash
-pip install homeassistant
-hass --config /path/to/config --open-ui
-```
+### Configurer Home Assistant
 
-### Étape 6 : Configurer Home Assistant
+1. Accéder à http://localhost:8123 — setup initial
+2. Ajouter intégrations : Philips Hue, IKEA, Samsung, EZWIZ, Petkit
+3. Créer token : Settings → Users → Profile → Long-lived access tokens
+4. Copier dans `.env` : `HA_TOKEN=...`
 
-1. Aller à http://localhost:8123
-2. Setup initial (user, localisation, etc.)
-3. Ajouter intégrations :
-   - Philips Hue : Settings > Devices > Add integration > Hue
-   - IKEA : Add integration > IKEA Dirigera
-   - Samsung : Add integration > Samsung TV
-   - EZWIZ : Add integration > EZviz
-   - Petkit : Add integration > Petkit
+### Obtenir clé OpenAI
 
-4. Créer token long-lived :
-   - Settings > Users > Profile > Tokens
-   - Copier dans .env : `HA_TOKEN=...`
+1. https://platform.openai.com/api-keys
+2. Créer une clé API
+3. Copier dans `.env` : `OPENAI_API_KEY=sk-...`
 
-### Étape 7 : Obtenir clés API Azure
+Pour Azure OpenAI : https://portal.azure.com → Azure OpenAI Service → Keys and Endpoints
 
-1. Créer compte Azure : https://portal.azure.com
-2. Créer ressource "Azure OpenAI"
-3. Déployer modèle GPT-4o
-4. Copier endpoint + key dans .env
-
-## 2️⃣ Installation Raspberry Pi
-
-### Pi Zero 2 W / Pi 5
-
-#### Étape 1 : Préparation OS
-```bash
-# Mettre à jour
-sudo apt update && sudo apt upgrade -y
-
-# Installer dépendances système
-sudo apt install -y python3.11 python3-pip python3-venv \
-    libopenblas0 libatlas-base-dev libjasper-dev \
-    libtiff5 libjasper1 libharfbuzz0b libwebp6 \
-    libopenjp2-7 libpython3-dev
-```
-
-#### Étape 2 : Client Wyoming
+### Lancer
 
 ```bash
-# Créer répertoire
-mkdir -p ~/assistant && cd ~/assistant
-
-# Virtual env
-python3 -m venv venv
-source venv/bin/activate
-
-# Installation Whisper + Wyoming
-pip install faster-whisper --no-cache-dir
-pip install websockets pyaudio numpy
-
-# Télécharger le client exemple
-wget https://repo/examples/pi_satellite.py
-```
-
-#### Étape 3 : Lancer le client
-
-```bash
-# Adapter l'IP du serveur central
-export ASSISTANT_SERVER="ws://192.168.1.100:10700"
-export PI_ROOM="pi_zero"  # ou "pi_5"
-
-# Lancer
-python3 pi_satellite.py
-```
-
-Pour démarrage auto (systemd) :
-
-```bash
-# Créer service
-sudo tee /etc/systemd/system/assistant-pi.service << EOF
-[Unit]
-Description=Assistant Wyoming Client
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/home/pi/assistant
-ExecStart=/home/pi/assistant/venv/bin/python3 pi_satellite.py
-Environment="ASSISTANT_SERVER=ws://192.168.1.100:10700"
-Environment="PI_ROOM=pi_zero"
-User=pi
-Restart=on-failure
-RestartSec=30
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Activer
-sudo systemctl enable assistant-pi.service
-sudo systemctl start assistant-pi.service
-
-# Vérifier logs
-sudo journalctl -u assistant-pi.service -f
-```
-
-## 3️⃣ Lancer l'Assistant
-
-### Serveur Central
-
-```bash
-# Activer venv (si pas encore fait)
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate      # Windows
-
-# Lancer l'application
 python main.py
 ```
 
-Attendez les logs :
 ```
 🚀 Assistant Personnel Haut de Gamme v1.0
-==================================================
 ✅ Tous les modules initialisés avec succès
 ▶️ Démarrage de la boucle principale...
 🎙️ Démarrage du traitement audio...
 ```
 
-## 4️⃣ Tests & Vérification
-
-### Test 1 : Connectivité Wyoming
+### Vérifier l'installation
 
 ```bash
-# Pi Zero (ou test local)
-python examples/pi_satellite.py
-
-# Serveur - vérifier logs : "Client Wyoming connecté"
+python verify_installation.py
 ```
 
-### Test 2 : Performance
+---
+
+## 2️⃣ Raspberry Pi (satellites)
+
+Déployer des microphones satellites qui envoient l'audio au serveur central via **Wyoming Protocol** (WebSocket + PCM16).
+
+### Architecture multi-room
+
+```
+┌─ Serveur Central (PC)
+│  ├─ WyomingServer (:10700)
+│  └─ BrainEngine + TTS
+│
+├─ Pi 5 (Salon) ──────── ws://PC:10700
+├─ Pi Zero 2W (Chambre) ── ws://PC:10700
+└─ Pi Zero 2W (Cuisine) ── ws://PC:10700
+```
+
+### Préparer le Pi
 
 ```bash
-# Sur le serveur
-python examples/test_performance.py
+# Mettre à jour
+sudo apt update && sudo apt upgrade -y
 
-# Résultat attendu : E2E total < 500ms
+# Dépendances système
+sudo apt install -y python3 python3-pip python3-dev \
+    portaudio19-dev libasound2-dev
+
+# Dépendances Python
+pip3 install --upgrade pip
+pip3 install pyaudio websockets numpy
+
+# Optionnel (STT local) :
+pip3 install faster-whisper
 ```
 
-### Test 3 : Home Assistant
+### Vérifier le microphone
 
 ```bash
-# Tester l'API HA
-curl -H "Authorization: Bearer $HA_TOKEN" \
-     http://localhost:8123/api/states
-
-# Doit retourner la liste des entités
+arecord -l                          # Lister les périphériques
+arecord -c 1 -f S16_LE -r 16000 -d 3 test.wav  # Test 3s
+aplay test.wav                      # Écouter
 ```
 
-### Test 4 : LLM
+### Copier le code
 
-Dire (via micro Pi) : "Allume la lumière du salon"
-→ Doit voir dans les logs : fonction `control_light()` appelée
+```bash
+# Depuis le PC :
+scp examples/pi_satellite.py pi@pi-salon.local:~/assistant/
+
+# Ou git clone sur le Pi :
+git clone <repo-url> ~/assistant
+```
+
+### Lancer le client
+
+```bash
+python3 ~/assistant/pi_satellite.py \
+  --server 192.168.1.50 \
+  --port 10700 \
+  --device-id pi-salon \
+  --device-name "Salon Pi"
+```
+
+### Autostart (systemd)
+
+```bash
+sudo tee /etc/systemd/system/assistant-pi.service << EOF
+[Unit]
+Description=Assistant Wyoming Pi Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/assistant
+ExecStart=/usr/bin/python3 /home/pi/assistant/pi_satellite.py \
+  --server 192.168.1.50 --port 10700 \
+  --device-id pi-salon --device-name "Salon Pi"
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable assistant-pi
+sudo systemctl start assistant-pi
+
+# Vérifier :
+sudo journalctl -u assistant-pi -f
+```
+
+### IP statique (recommandé)
+
+```bash
+sudo nmtui
+# ou éditer /etc/dhcpcd.conf :
+# interface wlan0
+# static ip_address=192.168.1.51/24
+# static routers=192.168.1.1
+```
+
+### Optimisation par modèle
+
+| Pi | WHISPER_MODEL | Chunk size | Workers |
+|----|---------------|------------|---------|
+| Zero 2W | tiny | 512 | 1 |
+| Pi 5 | base | 2048 | 4 |
+
+---
+
+## 3️⃣ Docker
+
+### Prérequis Docker
+
+```bash
+# Windows : Docker Desktop avec WSL2
+# Linux :
+sudo apt-get install -y docker.io docker-compose
+sudo usermod -aG docker $USER
+
+# Vérifier :
+docker --version
+docker-compose --version
+```
+
+### Lancer
+
+```bash
+cd d:/Exo
+cp .env.example .env              # Configurer les clés
+docker-compose up -d
+```
+
+### Services exposés
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Wyoming Server | 10700 | Audio multi-room |
+| Home Assistant | 8123 | Domotique |
+| Mopidy | 6680 | Streaming musique |
+
+### Gestion
+
+```bash
+docker-compose ps                   # État des services
+docker-compose logs -f assistant    # Logs temps réel
+docker-compose restart assistant    # Redémarrer un service
+docker-compose down                 # Arrêter tout
+docker-compose down -v              # Arrêter + supprimer volumes
+docker-compose build --no-cache     # Rebuild après modif code
+```
+
+### Volumes persistants
+
+| Volume | Contenu |
+|--------|---------|
+| `homeassistant_config` | Config Home Assistant |
+| `chroma-db` | Base vectorielle RAG |
+| `./data/chroma` | Cache ChromaDB local |
+| `./assistant.log` | Logs application |
+
+### Réseau Docker
+
+Les services communiquent via le réseau `assistant-net` par nom d'hôte :
+
+```python
+# Depuis assistant → Home Assistant :
+url = "http://homeassistant:8123"
+
+# Depuis Pi satellite → assistant :
+host = "assistant"
+port = 10700
+```
+
+### Connecter les Pi au Docker
+
+```bash
+# Sur chaque Pi :
+python3 pi_satellite.py --server <IP-SERVEUR-DOCKER> --port 10700
+
+# Dans HA : Settings → Devices → Wyoming Protocol → assistant:10700
+```
+
+### Monitoring
+
+```bash
+docker stats                        # CPU/RAM par service
+docker system df                    # Espace disque
+```
+
+---
 
 ## 🔧 Troubleshooting
 
-### "AZURE_OPENAI_ENDPOINT requis"
-```bash
-# Vérifier .env existe
-ls -la .env
+### Pas de clé API
 
-# Vérifier contenu (ne pas montrer la clé!)
-cat .env | grep AZURE
+```bash
+# Vérifier .env
+cat .env | grep OPENAI_API_KEY
+# Doit contenir sk-...
 ```
 
-### "Connexion HA échouée"
+### Home Assistant inaccessible
+
 ```bash
-# Vérifier HA accessible
 curl -I http://192.168.1.100:8123
-
-# Vérifier token
-curl -H "Authorization: Bearer $HA_TOKEN" \
-     http://192.168.1.100:8123/api/
-
-# Doit retourner un JSON, pas 401 Unauthorized
+curl -H "Authorization: Bearer $HA_TOKEN" http://192.168.1.100:8123/api/
+# Doit retourner du JSON, pas 401
 ```
 
-### "Whisper pas disponible"
+### Whisper ne charge pas
+
 ```bash
-# Réinstaller
 pip install --upgrade faster-whisper
-
-# Télécharger modèle
-python -c "import faster_whisper; faster_whisper.WhisperModel('base')"
+python -c "from faster_whisper import WhisperModel; WhisperModel('base')"
 ```
 
-### "GPU non détecté"
-```bash
-# Vérifier CUDA disponible
-python -c "import torch; print(torch.cuda.is_available())"
+### Microphone non détecté (Pi)
 
-# Si False, utiliser CPU
-export DEVICE=cpu
+```bash
+arecord -l
+# Si vide : sudo raspi-config → Interface Options → Audio
+sudo reboot
 ```
 
-### "Pygame crash"
-```bash
-# Réinstaller SDL
-sudo apt install libsdl2-dev libsdl2-image-dev  # Linux
+### Connexion Wyoming refusée
 
-# Ou sur Windows : pip install pygame-pygame
+```bash
+# Vérifier que le serveur tourne :
+netstat -an | grep 10700
+# Vérifier firewall :
+sudo ufw allow 10700
+# Tester ping :
+ping 192.168.1.50
+```
+
+### Pygame crash
+
+```bash
+# Linux :
+sudo apt install libsdl2-dev libsdl2-image-dev
+# Windows/tous :
 pip install --upgrade pygame
 ```
 
-## 📊 Vérifier Installation
+### GPU non détecté
 
 ```bash
-# Script de vérification
-python << 'EOF'
-import os
-import sys
-
-checks = {
-    "Python 3.11+": sys.version_info >= (3, 11),
-    "Azure SDK": __import__("importlib.util").util.find_spec("azure.ai.openai") is not None,
-    "ChromaDB": __import__("importlib.util").util.find_spec("chromadb") is not None,
-    "Faster-Whisper": __import__("importlib.util").util.find_spec("faster_whisper") is not None,
-    "Pygame": __import__("importlib.util").util.find_spec("pygame") is not None,
-    ".env file": os.path.exists(".env"),
-}
-
-print("✅ Installation Check\n")
-for check, result in checks.items():
-    symbol = "✅" if result else "❌"
-    print(f"{symbol} {check}")
-
-if all(checks.values()):
-    print("\n✨ Installation réussie!")
-else:
-    print("\n⚠️  Dépendances manquantes - relancer pip install -r requirements.txt")
-EOF
+python -c "import torch; print(torch.cuda.is_available())"
+# Si False → utiliser DEVICE=cpu dans .env
 ```
 
-## 🚀 Prochaines Étapes
+### Docker : HA ne démarre pas
 
-1. **Ajouter des animaux** à la mémoire :
-   ```bash
-   curl -X POST http://localhost:8000/api/memory \
-        -H "Content-Type: application/json" \
-        -d '{"category": "animal", "content": "Felix est un chat noir"}'
-   ```
-
-2. **Tester commandes vocales** :
-   - "Allume le salon"
-   - "Quelle est la température?"
-   - "Mets TIDAL, du Indie"
-
-3. **Optimiser latence** selon mesures de `test_performance.py`
-
-## 📞 Support
-
-Consulter les logs :
 ```bash
-tail -f assistant.log
+# HA met 2-3 min à démarrer
+docker-compose logs homeassistant | tail -20
+docker-compose ps   # Attendre status "healthy"
 ```
-
-Vérifier ARCHITECTURE.md pour flux détaillé.
