@@ -55,9 +55,17 @@ DEVICE=auto
 WHISPER_WORKERS=8
 
 # Taille du modèle Whisper
-# Options: tiny, small, base, small, medium, large
-# Plus grand = meilleur accuracy mais plus lent
+# Options: tiny, base, small, medium, large
+# "base" = bon compromis vitesse/précision FR (~0.5-1s)
+# "small" = meilleure précision mais ~2-3x plus lent
 WHISPER_MODEL=base
+
+# ========== VAD (Voice Activity Detection) ==========
+# Multiplicateur du bruit ambiant pour le seuil adaptatif
+# Le seuil effectif = bruit_ambiant × multiplicateur
+# Plus bas = plus sensible (capte mieux les voix douces)
+# Plus haut = plus strict (filtre mieux le bruit)
+EXO_VAD_MULTIPLIER=2.5
 ```
 
 ### TTS (Text-to-Speech) - Kokoro + Piper + Fish-Speech + XTTS v2
@@ -183,6 +191,9 @@ HA_TOKEN=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiI4ZDk4NzBh...
 DEVICE=auto
 WHISPER_WORKERS=8
 WHISPER_MODEL=base
+
+# ==================== VAD (Voice Activity Detection) ====================
+EXO_VAD_MULTIPLIER=2.5
 
 # ==================== TTS ====================
 FISH_SPEECH_ENDPOINT=http://localhost:8000

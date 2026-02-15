@@ -4,7 +4,7 @@
 Quand une utterance est captée, elle est transcrite et analysée pour le wake word.
 
 Fonctionnalités:
-- VAD (Voice Activity Detection) par RMS energy
+- VAD (Voice Activity Detection) par RMS energy avec seuil adaptatif
 - Capture d'utterance complète (voix → silence = fin)
 - Détection du mot "EXO" dans la transcription Whisper
 - Extraction de la commande après le wake word
@@ -12,6 +12,8 @@ Fonctionnalités:
 
 import asyncio
 import logging
+import os
+import time
 from typing import Optional
 import numpy as np
 
@@ -25,11 +27,16 @@ WAKE_WORDS = [
 ]
 
 # ─── VAD Configuration ───────────────────────────────────
-DEFAULT_VOICE_THRESHOLD = 500       # RMS seuil pour "voix active" (relevé pour filtrer bruit)
-DEFAULT_SILENCE_CHUNKS = 12        # ~0.8s de silence = fin d'utterance (réactif)
-DEFAULT_MIN_UTTERANCE_SEC = 0.8    # Ignorer bruits < 0.8s
+# Seuils abaissés pour capter les voix douces et commandes courtes
+DEFAULT_VOICE_THRESHOLD = 300       # RMS seuil pour "voix active" (abaissé de 500)
+DEFAULT_SILENCE_CHUNKS = 8         # ~0.5s de silence = fin d'utterance (réduit de 12)
+DEFAULT_MIN_UTTERANCE_SEC = 0.5    # Ignorer bruits < 0.5s (réduit de 0.8)
 DEFAULT_MAX_UTTERANCE_SEC = 15.0   # Sécurité max
-DEFAULT_MIN_VOICE_CHUNKS = 8       # Au moins 8 chunks vocaux pour valider
+DEFAULT_MIN_VOICE_CHUNKS = 4       # Au moins 4 chunks vocaux (réduit de 8)
+
+# ─── Seuil adaptatif ─────────────────────────────────────
+ADAPTIVE_MULTIPLIER = float(os.environ.get("EXO_VAD_MULTIPLIER", "2.5"))
+NOISE_FLOOR_SAMPLES = 30           # Nb chunks pour calibrer le bruit ambiant
 
 # ─── Hallucinations Whisper connues (filtrées) ───────────
 WHISPER_HALLUCINATIONS = [
@@ -100,6 +107,42 @@ def extract_command_after_wake(text: str) -> str:
     return after
 
 
+# ─── Noise floor adaptatif (partagé entre appels) ────────
+_noise_floor: float = 0.0
+_noise_calibrated: bool = False
+
+
+def calibrate_noise_floor(stream, chunk_size: int = 1024, num_samples: int = NOISE_FLOOR_SAMPLES) -> float:
+    """Mesure le bruit ambiant sur N chunks pour calibrer le seuil VAD.
+
+    Appelé au démarrage et périodiquement pour s'adapter à l'environnement.
+    """
+    global _noise_floor, _noise_calibrated
+    energies = []
+    for _ in range(num_samples):
+        try:
+            data = stream.read(chunk_size, exception_on_overflow=False)
+            energies.append(rms_energy(data))
+        except Exception:
+            continue
+    if energies:
+        _noise_floor = float(np.median(energies))
+        _noise_calibrated = True
+        logger.info("🎤 Bruit ambiant calibré : %.0f RMS (seuil adaptatif : %.0f)",
+                     _noise_floor, _noise_floor * ADAPTIVE_MULTIPLIER)
+    return _noise_floor
+
+
+def get_adaptive_threshold(fixed_threshold: float) -> float:
+    """Retourne le seuil VAD adaptatif (max entre fixe et adaptatif)."""
+    if _noise_calibrated and _noise_floor > 0:
+        adaptive = _noise_floor * ADAPTIVE_MULTIPLIER
+        # Prendre le max pour éviter les faux positifs, mais plafonner
+        # pour ne pas devenir sourd dans un environnement bruyant
+        return max(min(adaptive, fixed_threshold * 1.5), fixed_threshold * 0.5)
+    return fixed_threshold
+
+
 async def capture_utterance(
     stream,
     sample_rate: int = 16000,
@@ -112,11 +155,13 @@ async def capture_utterance(
 ) -> bytes:
     """Capture une utterance complète : attend la voix, accumule jusqu'au silence.
 
+    Utilise un seuil adaptatif basé sur le bruit ambiant calibré au démarrage.
+
     Args:
         stream: PyAudio stream ouvert en input
         sample_rate: Fréquence d'échantillonnage
         chunk_size: Taille de chaque chunk lu
-        voice_threshold: Seuil RMS pour détecter la voix
+        voice_threshold: Seuil RMS fixe pour détecter la voix (ajusté par adaptif)
         silence_chunks_end: Nombre de chunks silencieux consécutifs = fin d'utterance
         min_sec: Durée minimum d'une utterance valide
         max_sec: Durée maximum (sécurité)
@@ -125,6 +170,14 @@ async def capture_utterance(
     Returns:
         Audio bytes PCM16 de l'utterance, ou b"" si timeout/trop court
     """
+    # Calibration initiale du bruit ambiant (une seule fois)
+    global _noise_calibrated
+    if not _noise_calibrated:
+        calibrate_noise_floor(stream, chunk_size)
+
+    # Seuil adaptatif
+    effective_threshold = get_adaptive_threshold(voice_threshold)
+
     buffer = b""
     silent_count = 0
     voice_detected = False
@@ -145,7 +198,7 @@ async def capture_utterance(
         energy = rms_energy(data)
 
         if not voice_detected:
-            if energy > voice_threshold:
+            if energy > effective_threshold:
                 voice_detected = True
                 buffer = data
                 silent_count = 0
@@ -161,7 +214,7 @@ async def capture_utterance(
             buffer += data
             total_chunks += 1
 
-            if energy < voice_threshold:
+            if energy < effective_threshold:
                 silent_count += 1
                 if silent_count >= silence_chunks_end:
                     break

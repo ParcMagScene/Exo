@@ -30,7 +30,7 @@ DEFAULT_DEVICE_INDEX = None      # None = micro par défaut du système
 SAMPLE_RATE = 16000
 CHUNK_SIZE = 1024
 CHANNELS = 1
-WHISPER_MODEL = "small"          # "small" = meilleure précision FR
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")  # "base" = bon compromis vitesse/précision FR
 FOLLOWUP_TIMEOUT_SEC = 7.0      # Attente après "Exo" seul (généreux)
 
 
@@ -73,6 +73,7 @@ class ExoListener:
         logger.info("Chargement Faster-Whisper (%s)...", self.whisper_model_name)
         from faster_whisper import WhisperModel  # type: ignore
 
+        t0 = time.time()
         loop = asyncio.get_running_loop()
         self._whisper = await loop.run_in_executor(
             None,
@@ -82,7 +83,7 @@ class ExoListener:
                 compute_type="float32",
             ),
         )
-        logger.info("✅ Whisper OK (modèle: %s)", self.whisper_model_name)
+        logger.info("✅ Whisper OK (modèle: %s, chargé en %.1fs)", self.whisper_model_name, time.time() - t0)
 
         # 2. BrainEngine (GPT-4o)
         logger.info("Initialisation BrainEngine...")
@@ -92,18 +93,18 @@ class ExoListener:
         await self._brain.initialize()
         logger.info("✅ Brain OK")
 
-        # 3. TTSClient (Piper TTS local → OpenAI fallback)
+        # 3. TTSClient (Kokoro → Piper → OpenAI fallback)
         logger.info("Initialisation TTSClient...")
         from src.assistant.tts_client import TTSClient
 
         self._tts = TTSClient()
-        self._tts.preload()  # Pré-charger Piper pour éviter 1.4s au 1er appel
+        self._tts.preload()  # Pré-charger pour éviter latence au 1er appel
         logger.info("✅ TTS OK")
 
         # 4. Pygame mixer (playback — sample rate adapté au moteur TTS)
         import pygame  # type: ignore
 
-        tts_sr = self._tts.sample_rate  # 22050 (Piper) ou 24000 (OpenAI)
+        tts_sr = self._tts.sample_rate  # 22050 (Piper) ou 24000 (Kokoro/OpenAI)
         pygame.mixer.init(frequency=tts_sr, size=-16, channels=1)
         self._pygame_ready = True
         logger.info(f"✅ Pygame mixer OK (frequency={tts_sr}Hz)")
@@ -125,6 +126,11 @@ class ExoListener:
         )
         dev_name = self._pa.get_device_info_by_index(self.device_index).get("name", "?")
         logger.info("✅ Micro ouvert — device %d : %s (%d Hz)", self.device_index, dev_name, SAMPLE_RATE)
+
+        # 6. Calibration du bruit ambiant (seuil VAD adaptatif)
+        from src.audio.wake_word import calibrate_noise_floor
+        logger.info("🔇 Calibration bruit ambiant (silence 2s)...")
+        calibrate_noise_floor(self._stream, CHUNK_SIZE)
 
     def _find_best_input_device(self) -> int:
         """Trouve le meilleur micro disponible."""
@@ -189,15 +195,16 @@ class ExoListener:
         - Playback pygame (pas de grésillements, qualité parfaite)
         - Micro coupé pendant la réponse (évite auto-écoute)
         - Buffer micro vidé après playback
+        - Instrumentation timing complète
         """
         logger.info("💬 COMMANDE : « %s »", command_text)
+        t0_total = time.time()
 
         # ── Couper le micro pendant la réponse ──
         if self._stream:
             self._stream.stop_stream()
 
         # ── Brain (GPT-4o) ──
-        t0_total = time.time()
         t0 = time.time()
         result = await self._brain.process_command(
             text=command_text,
@@ -208,7 +215,7 @@ class ExoListener:
         response_text = result.get("text", "")
         function_calls = result.get("function_calls", [])
 
-        logger.info("🤖 Réponse (%0.1fs) : %s", brain_time, response_text[:200])
+        logger.info("🤖 Réponse (%0.2fs) : %s", brain_time, response_text[:200])
 
         if function_calls:
             for fc in function_calls:
@@ -216,23 +223,24 @@ class ExoListener:
 
         # ── TTS + Playback ──
         if response_text:
-            logger.info("🔊 Synthèse vocale...")
             t0 = time.time()
             try:
                 audio = await self._tts.speak(response_text)
                 tts_time = time.time() - t0
-                logger.info("✅ TTS OK (%.1fs, %dKB, total %.1fs)",
-                            tts_time, len(audio) // 1024,
-                            time.time() - t0_total)
+                logger.info("🔊 TTS (%.2fs, %dKB)", tts_time, len(audio) // 1024)
 
                 # Playback pygame (propre, sans grésillements)
                 import pygame  # type: ignore
+                t0_play = time.time()
                 sound = pygame.mixer.Sound(io.BytesIO(audio))
                 sound.play()
                 while pygame.mixer.get_busy():
                     await asyncio.sleep(0.05)
 
-                logger.info("✅ Playback terminé")
+                play_time = time.time() - t0_play
+                total_time = time.time() - t0_total
+                logger.info("✅ Pipeline complet : Brain=%.2fs + TTS=%.2fs + Play=%.2fs = TOTAL %.2fs",
+                            brain_time, tts_time, play_time, total_time)
             except Exception as e:
                 logger.error("Erreur TTS/playback : %s", e)
                 print(f"\n  EXO : {response_text}\n")
@@ -265,6 +273,7 @@ class ExoListener:
         try:
             while True:
                 # ── Étape 1 : Capturer une utterance ──────
+                t0_capture = time.time()
                 utterance = await capture_utterance(
                     self._stream,
                     sample_rate=SAMPLE_RATE,
@@ -274,12 +283,15 @@ class ExoListener:
                 if not utterance:
                     continue  # Bruit trop court
 
+                capture_time = time.time() - t0_capture
                 duration = len(utterance) / (SAMPLE_RATE * 2)
 
                 # ── Étape 2 : Transcrire ──────────────────
+                t0_stt = time.time()
                 transcript = await loop.run_in_executor(
                     None, self._transcribe, utterance
                 )
+                stt_time = time.time() - t0_stt
 
                 if not transcript:
                     continue
@@ -289,7 +301,8 @@ class ExoListener:
                     logger.debug("Hallucination filtrée : « %s »", transcript)
                     continue
 
-                logger.info("📝 Entendu : « %s » (%.1fs)", transcript, duration)
+                logger.info("📝 Entendu : « %s » (capture=%.2fs, audio=%.1fs, STT=%.2fs)",
+                            transcript, capture_time, duration, stt_time)
 
                 # ── Étape 3 : Wake word ? ─────────────────
                 if not contains_wake_word(transcript):

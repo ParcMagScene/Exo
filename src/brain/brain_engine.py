@@ -309,11 +309,11 @@ class BrainEngine:
         """
         logger.info(f"💬 Conversation: '{text}' (pièce: {room})")
         
-        # Récupération du contexte RAG personnalisé
-        rag_context = await self._fetch_rag_context(text, room)
-        
-        # Récupération du contexte local (heure, météo, localisation)
-        local_context = await self.local_info.get_context_summary()
+        # Récupération contexte RAG + local EN PARALLÈLE (gain ~0.5-1s)
+        rag_context, local_context = await asyncio.gather(
+            self._fetch_rag_context(text, room),
+            self.local_info.get_context_summary(),
+        )
         
         # Construction du prompt système enrichi
         system_prompt = self._build_system_prompt(room, rag_context, local_context)
@@ -347,36 +347,42 @@ class BrainEngine:
         return result
 
     async def _fetch_rag_context(self, text: str, room: Optional[str]) -> str:
-        """Récupère le contexte pertinent depuis ChromaDB."""
+        """Récupère le contexte pertinent depuis ChromaDB (requêtes parallèles)."""
         if not HAS_CHROMA or not self._chroma_client:
             return ""
         
         context_parts = []
         
         try:
-            # Recherche animaux
-            results = self._collection_animals.query(
-                query_texts=[text],
-                n_results=2
-            )
-            if results.get("documents") and results["documents"][0]:
-                context_parts.append("🐾 Infos animaux: " + ", ".join(results["documents"][0]))
+            loop = asyncio.get_running_loop()
             
-            # Recherche plan maison
-            results = self._collection_house.query(
-                query_texts=[text],
-                n_results=2
+            # Lancer les 3 requêtes ChromaDB en parallèle (gain ~2x)
+            animals_fut = loop.run_in_executor(
+                None, lambda: self._collection_animals.query(query_texts=[text], n_results=2)
             )
-            if results.get("documents") and results["documents"][0]:
-                context_parts.append("🏠 Plan maison: " + ", ".join(results["documents"][0]))
+            house_fut = loop.run_in_executor(
+                None, lambda: self._collection_house.query(query_texts=[text], n_results=2)
+            )
+            prefs_fut = loop.run_in_executor(
+                None, lambda: self._collection_preferences.query(query_texts=[text], n_results=2)
+            )
             
-            # Recherche préférences
-            results = self._collection_preferences.query(
-                query_texts=[text],
-                n_results=2
+            results_animals, results_house, results_prefs = await asyncio.gather(
+                animals_fut, house_fut, prefs_fut,
+                return_exceptions=True,
             )
-            if results.get("documents") and results["documents"][0]:
-                context_parts.append("⚙️ Préférences: " + ", ".join(results["documents"][0]))
+            
+            if not isinstance(results_animals, Exception):
+                if results_animals.get("documents") and results_animals["documents"][0]:
+                    context_parts.append("🐾 Infos animaux: " + ", ".join(results_animals["documents"][0]))
+            
+            if not isinstance(results_house, Exception):
+                if results_house.get("documents") and results_house["documents"][0]:
+                    context_parts.append("🏠 Plan maison: " + ", ".join(results_house["documents"][0]))
+            
+            if not isinstance(results_prefs, Exception):
+                if results_prefs.get("documents") and results_prefs["documents"][0]:
+                    context_parts.append("⚙️ Préférences: " + ", ".join(results_prefs["documents"][0]))
         
         except Exception as e:
             logger.error(f"Erreur RAG: {e}")
