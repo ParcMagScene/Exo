@@ -78,8 +78,8 @@ class LocalInfo:
         try:
             from zoneinfo import ZoneInfo  # Python 3.9+
             tz = ZoneInfo(self.timezone_name)
-        except ImportError:
-            # Fallback si zoneinfo absent : UTC+1 pour FR
+        except (ImportError, KeyError, Exception):
+            # Fallback si zoneinfo/tzdata absent : UTC+1 pour FR
             tz = timezone(timedelta(hours=1))
 
         return datetime.now(tz)

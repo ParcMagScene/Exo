@@ -11,9 +11,22 @@ from typing import Optional, Dict, Any
 
 from .chroma_client import ChromaClient
 from .tts_client import TTSClient
-from .gui_face import FaceController, FaceState
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Stubs pour l'ancien GUI (supprimé) ──────────────────
+class FaceState:
+    IDLE = "idle"
+    LISTENING = "listening"
+    PROCESSING = "processing"
+    RESPONDING = "responding"
+
+
+class FaceController:
+    """No-op stub remplaçant l'ancien FaceController Pygame."""
+    async def set_state(self, state: str):
+        pass
 
 # Client OpenAI standard (pas Azure SDK inexistant)
 try:
@@ -188,5 +201,6 @@ class Brain:
         except Exception as e:
             logger.error(f"Function call failed ({name}): {e}")
 
-    async def update_face_state(self, state: FaceState):
-        await self.face.set_state(state)
+    async def update_face_state(self, state: str):
+        """Legacy — ne fait rien, l'état est géré par le bridge QML."""
+        pass

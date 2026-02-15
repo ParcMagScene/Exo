@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 WAKE_WORDS = [
     "exo", "écho", "echo", "expo", "ego", "exc", "exot",
     "x.o", "x o", "exau", "exeau", "exos", "exho",
+    # Variantes supplémentaires observées avec Whisper FR
+    "exeau", "esso", "ekso", "ex-o", "axo", "hecho",
+    "ex o", "ex-eau", " exo", "exo ", "ecso",
 ]
 
 # ─── VAD Configuration ───────────────────────────────────
@@ -44,6 +47,13 @@ WHISPER_HALLUCINATIONS = [
     "merci d'avoir regardé", "merci de votre attention",
     "traduisez", "subscribe", "abonnez",
     "...", "…", "♪", "🎵",
+    # Hallucinations fréquentes en français (bruit de fond)
+    "merci", "au revoir", "bonne journée",
+    "je vous remercie", "sil vous plait",
+    "c'est la fin", "la fin", "fin de la vidéo",
+    "sous-titrage", "stéphanie", "contributions",
+    "musique", "applaudissements", "rires",
+    "transcription", "traduction",
 ]
 
 
