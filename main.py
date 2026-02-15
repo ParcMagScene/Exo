@@ -2,10 +2,11 @@
 
 Pipeline permanent:
   Micro en continu → VAD → Whisper STT → Détection « EXO »
-  → GPT-4o (BrainEngine) → TTS OpenAI (nova) → Playback
+  → GPT-4o (BrainEngine) → TTS Kokoro → Playback
 
 Utilisation:
-  python main.py                   # Micro par défaut
+  python main.py                   # Console seule
+  python main.py --gui             # Interface graphique PySide6
   python main.py --device 1        # Micro index 1 (ex: Brio 500)
   python main.py --whisper base    # Modèle Whisper plus léger
 """
@@ -40,6 +41,10 @@ async def main():
     """Démarre EXO en écoute permanente."""
     parser = argparse.ArgumentParser(description="EXO — Assistant vocal permanent")
     parser.add_argument(
+        "--gui", action="store_true",
+        help="Lancer l'interface graphique PySide6/QML"
+    )
+    parser.add_argument(
         "--device", type=int, default=None,
         help="Index du micro PyAudio (None = défaut système)"
     )
@@ -50,15 +55,29 @@ async def main():
     )
     args = parser.parse_args()
 
-    from src.core.listener import ExoListener
-
-    listener = ExoListener(
-        device_index=args.device,
-        whisper_model=args.whisper,
-    )
-
-    await listener.start()
+    if args.gui:
+        # Mode GUI — lance PySide6/QML avec pipeline en arrière-plan
+        from src.gui.app import ExoApp
+        app = ExoApp(
+            device_index=args.device,
+            whisper_model=args.whisper,
+        )
+        app.run()  # Bloquant (Qt event loop)
+    else:
+        # Mode console — pipeline seul
+        from src.core.listener import ExoListener
+        listener = ExoListener(
+            device_index=args.device,
+            whisper_model=args.whisper,
+        )
+        await listener.start()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # En mode GUI, main() n'est pas async (Qt gère la boucle)
+    import sys as _sys
+    if "--gui" in _sys.argv:
+        import asyncio as _asyncio
+        _asyncio.run(main())
+    else:
+        asyncio.run(main())

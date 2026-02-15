@@ -8,6 +8,7 @@ build/
 
 # Environment (contient des clés API !)
 .env
+.venv/
 
 # Logs
 *.log

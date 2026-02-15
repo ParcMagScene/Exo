@@ -54,10 +54,10 @@ class Config:
     TIDAL_QUALITY: str = os.getenv("TIDAL_QUALITY", "LOSSLESS")
 
     # ==================== GUI ====================
-    GUI_WIDTH: int = int(os.getenv("GUI_WIDTH", "800"))
-    GUI_HEIGHT: int = int(os.getenv("GUI_HEIGHT", "600"))
-    GUI_FPS: int = int(os.getenv("GUI_FPS", "144"))
-    ENABLE_PYGAME: bool = os.getenv("ENABLE_PYGAME", "true").lower() == "true"
+    GUI_WIDTH: int = int(os.getenv("GUI_WIDTH", "1280"))
+    GUI_HEIGHT: int = int(os.getenv("GUI_HEIGHT", "800"))
+    GUI_FULLSCREEN: bool = os.getenv("GUI_FULLSCREEN", "false").lower() == "true"
+    FLOOR_PLANS_PATH: str = os.getenv("FLOOR_PLANS_PATH", "config/floor_plans.json")
 
     # ==================== WYOMING ====================
     WYOMING_HOST: str = os.getenv("WYOMING_HOST", "0.0.0.0")
