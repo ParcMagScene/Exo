@@ -13,6 +13,7 @@ Principe:
 """
 
 import asyncio
+import concurrent.futures
 import logging
 import time
 from typing import Dict, Optional, Tuple
@@ -63,6 +64,7 @@ async def streaming_capture_and_transcribe(
     min_sec: float = DEFAULT_MIN_UTTERANCE_SEC,
     max_sec: float = DEFAULT_MAX_UTTERANCE_SEC,
     timeout_sec: Optional[float] = None,
+    executor: Optional[concurrent.futures.ThreadPoolExecutor] = None,
 ) -> Tuple[str, bytes, Dict]:
     """Capture audio avec VAD + transcription Whisper en parallèle.
 
@@ -80,6 +82,7 @@ async def streaming_capture_and_transcribe(
         min_sec: Durée minimum d'une utterance valide
         max_sec: Durée maximum (sécurité)
         timeout_sec: Abandon si aucune voix après ce délai
+        executor: ThreadPoolExecutor dédié pour Whisper (None = pool par défaut)
 
     Returns:
         (transcript, audio_bytes, timing_info)
@@ -156,7 +159,7 @@ async def streaming_capture_and_transcribe(
                     and voice_chunks >= DEFAULT_MIN_VOICE_CHUNKS):
                 snapshot = bytes(buffer)
                 pending_future = loop.run_in_executor(
-                    None, _transcribe_buffer, whisper_model, snapshot
+                    executor, _transcribe_buffer, whisper_model, snapshot
                 )
                 last_submit_offset = len(buffer)
                 voice_since_submit = 0
@@ -212,7 +215,7 @@ async def streaming_capture_and_transcribe(
 
     # Parole significative dans le tail → transcription finale complète
     transcript = await loop.run_in_executor(
-        None, _transcribe_buffer, whisper_model, buffer
+        executor, _transcribe_buffer, whisper_model, buffer
     )
     stt_time = time.time() - t0_stt
 

@@ -14,6 +14,7 @@ et ne s'arrête que sur Ctrl+C.
 """
 
 import asyncio
+import concurrent.futures
 import io
 import os
 import sys
@@ -57,6 +58,11 @@ class ExoListener:
         self._pa = None
         self._stream = None
         self._pygame_ready = False
+
+        # ThreadPool dédié pour Whisper (évite de bloquer le pool par défaut)
+        self._whisper_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="whisper"
+        )
 
     # ─── Initialisation ───────────────────────────────────
 
@@ -254,7 +260,12 @@ class ExoListener:
         # ── Réactiver le micro et vider le buffer ──
         if self._stream:
             self._stream.start_stream()
+            # Attendre que la réverbération se dissipe
+            await asyncio.sleep(0.3)
             self._flush_input_buffer()
+            # Re-calibrer le bruit ambiant (le niveau a pu changer)
+            from src.audio.wake_word import calibrate_noise_floor
+            calibrate_noise_floor(self._stream, CHUNK_SIZE)
 
     # ─── Boucle principale ────────────────────────────────
 
@@ -282,6 +293,7 @@ class ExoListener:
                     self._whisper,
                     sample_rate=SAMPLE_RATE,
                     chunk_size=CHUNK_SIZE,
+                    executor=self._whisper_executor,
                 )
 
                 if not transcript:
@@ -334,6 +346,7 @@ class ExoListener:
                             chunk_size=CHUNK_SIZE,
                             min_sec=0.3,
                             timeout_sec=remaining,
+                            executor=self._whisper_executor,
                         )
                         if text:
                             followup_text = text
