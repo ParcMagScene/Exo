@@ -43,7 +43,12 @@ def _transcribe_buffer(whisper_model, audio_bytes: bytes) -> str:
     samples = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     if len(samples) < 4800:  # < 0.3s
         return ""
-    segments, _ = whisper_model.transcribe(samples, language="fr", beam_size=1)
+    segments, _ = whisper_model.transcribe(
+        samples, language="fr", beam_size=1,
+        no_speech_threshold=0.85,   # Relevé (défaut 0.6) pour ne pas filtrer les mots courts
+        log_prob_threshold=-1.5,     # Plus tolérant sur la qualité de transcription
+        vad_filter=False,            # On fait déjà notre propre VAD
+    )
     return " ".join(seg.text for seg in segments).strip()
 
 

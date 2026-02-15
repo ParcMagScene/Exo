@@ -43,17 +43,16 @@ NOISE_FLOOR_SAMPLES = 30           # Nb chunks pour calibrer le bruit ambiant
 
 # ─── Hallucinations Whisper connues (filtrées) ───────────
 WHISPER_HALLUCINATIONS = [
-    "sous-titres", "sous-titre", "amara.org", "amara",
-    "merci d'avoir regardé", "merci de votre attention",
+    "sous-titres réalisés par",
+    "sous-titrage",
+    "amara.org",
+    "merci d'avoir regardé",
+    "merci de votre attention",
     "traduisez", "subscribe", "abonnez",
     "...", "…", "♪", "🎵",
-    # Hallucinations fréquentes en français (bruit de fond)
-    "merci", "au revoir", "bonne journée",
-    "je vous remercie", "sil vous plait",
-    "c'est la fin", "la fin", "fin de la vidéo",
-    "sous-titrage", "stéphanie", "contributions",
-    "musique", "applaudissements", "rires",
-    "transcription", "traduction",
+    "fin de la vidéo",
+    "contributions de",
+    "[musique]", "[applaudissements]", "[rires]",
 ]
 
 

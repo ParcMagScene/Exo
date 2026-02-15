@@ -156,7 +156,12 @@ class ExoListener:
         samples = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         if len(samples) < 4800:  # < 0.3s → trop court
             return ""
-        segments, _ = self._whisper.transcribe(samples, language="fr", beam_size=1)
+        segments, _ = self._whisper.transcribe(
+            samples, language="fr", beam_size=1,
+            no_speech_threshold=0.85,
+            log_prob_threshold=-1.5,
+            vad_filter=False,
+        )
         return " ".join(seg.text for seg in segments).strip()
 
     # ─── Playback ─────────────────────────────────────────
