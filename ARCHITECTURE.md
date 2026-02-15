@@ -141,9 +141,9 @@ Function Calls:
 ```
 Response text: "Lumière du salon allumée à 50%"
     ▼
-HardwareAccelerator.text_to_speech()
-    │ Fish-Speech endpoint
-    │ Fallback: XTTS v2 local
+TTSClient.speak()
+    │ Kokoro TTS local (24kHz, ff_siwis)
+    │ Fallback: Piper → OpenAI → Fish-Speech → Coqui
     ▼
 Audio WAV bytes
     ▼
@@ -167,21 +167,22 @@ FaceGUI.render_loop() @ 144Hz
 
 ## 🎯 Cibles de Latence
 
-| Composant | Latence | Cible | Status |
-|-----------|---------|-------|--------|
-| STT (Whisper) | <200ms | <200ms | ✅ |
-| RAG (ChromaDB) | <50ms | <100ms | ✅ |
-| LLM (GPT-4o) | <200ms | <200ms | ⚠️ |
-| Function Call (HA) | <50ms | <50ms | ✅ |
-| TTS (Fish-Speech) | <100ms | <100ms | ✅ |
-| **TOTAL E2E** | <600ms | **<500ms** | ⚠️ |
+| Composant | Latence typique | Status |
+|-----------|----------------|--------|
+| Capture VAD | 0.5-1s | ✅ |
+| STT (Whisper base) | 0.5-1.5s | ✅ |
+| RAG (ChromaDB) | <50ms | ✅ |
+| LLM (GPT-4o-mini) | 0.5-1.5s | ✅ |
+| Function Call (HA) | <50ms | ✅ |
+| TTS (Kokoro) | ~0.8s | ✅ |
+| **TOTAL E2E** | **~2-4s** | ✅ |
 
 ### Optimisations Appliquées
 
 - **Asyncio/await** : Pas de blocage I/O
 - **uvloop** : 2-4x plus rapide que asyncio std
-- **OpenVINO** : Accélération CPU/GPU pour Whisper
-- **Multi-threading Whisper** : 8 workers parallèles sur i9
+- **Whisper beam_size=1** : Greedy decode rapide
+- **Parallel RAG + Local** : Context fetch en asyncio.gather()
 - **WebSocket HA** : Latence ultra-faible vs REST
 - **ChromaDB local** : RAG sans réseau
 - **Cache GPU** : Gardien modèles LLM chargés
@@ -217,20 +218,13 @@ FaceGUI.render_loop() @ 144Hz
 3. Receive auth_ok
 4. Call services via `call_service` message
 
-### 5. Fish-Speech TTS
+### 5. Kokoro TTS (Local)
 
-**Port**: 8000 (REST)
+**Moteur** : Kokoro 0.9.4 — synthèse neurale locale
 
-**Endpoint**: `POST /v1/tts`
+**Config** : voix `ff_siwis`, langue `f` (français), 24kHz
 
-```json
-{
-  "text": "Bonjour",
-  "language": "fr",
-  "speaker": "default",
-  "format": "wav"
-}
-```
+**Cascade** : Kokoro → Piper → OpenAI → Fish-Speech → Coqui
 
 ## 🗃️ Données ChromaDB
 

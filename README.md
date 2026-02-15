@@ -1,273 +1,162 @@
-# 🤖 Assistant Personnel Haut de Gamme
+# 🤖 EXO — Assistant Vocal Personnel
 
-Assistant IA distribué multi-room pour domotique intégrée. Architecture modulaire asynchrone optimisée pour latence ultra-faible (<500ms).
+Assistant IA vocal avec wake word, domotique intégrée et architecture distribuée multi-room.
 
-## 🏗️ Architecture Distribuée
+**Stack** : Faster-Whisper (STT) → GPT-4o-mini (LLM) → Kokoro TTS (voix) → Pygame (playback)
 
-### Matériel
-- **Serveur Central** : PC Windows/Linux (Intel Core i9, RAM 48Go, GPU AMD RX 6750 XT)
-- **Satellites Audio** : 
-  - Raspberry Pi Zero 2 W (STT via Whisper)
-  - Raspberry Pi 5 (STT + GUI Media offscreen)
-- **Domotique** : Home Assistant (HUE, IKEA, Samsung, EZWIZ, Petkit)
+## ⚡ Démarrage Rapide
 
-### Structure du Projet
-
-```
-.
-├── src/
-│   ├── core/
-│   │   └── core.py                 # Orchestrateur principal (machine d'états)
-│   ├── brain/
-│   │   └── brain_engine.py          # LLM (GPT-4o) + RAG (ChromaDB) + Tools
-│   ├── hardware/
-│   │   └── hardware_accel.py        # STT/TTS (OpenVINO optimisé)
-│   ├── integrations/
-│   │   └── home_bridge.py           # Home Assistant WebSocket + REST
-│   ├── gui/
-│   │   └── visage_gui.py            # Interface Pygame 144Hz (avatar expressif)
-│   └── protocols/
-│       └── wyoming.py               # Serveur Wyoming (audio multi-room)
-├── data/
-│   └── chroma/                      # Base vectorielle ChromaDB
-├── config/                          # Fichiers configuration
-├── main.py                          # Point d'entrée application
-├── requirements.txt                 # Dépendances Python
-├── .env.example                     # Variables d'environnement (à copier en .env)
-└── README.md                        # Ce fichier
-```
-
-## 🔧 Installation
-
-### Prérequis
-- Python 3.11+
-- pip ou conda
-- (Optionnel) CUDA toolkit pour GPU NVIDIA
-
-### Étapes
-
-1. **Cloner/Copier le projet**
 ```bash
+# 1. Clone + virtual env
 cd d:/Exo
-```
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Linux/Mac
 
-2. **Créer un environnement virtuel** (recommandé)
-```bash
-python -m venv venv
-# Windows
-venv\Scripts\activate
-# Linux/Mac
-source venv/bin/activate
-```
-
-3. **Installer les dépendances**
-```bash
+# 2. Installer
 pip install -r requirements.txt
-```
 
-4. **Configurer les variables d'environnement**
-```bash
-# Copier .env.example en .env
-cp .env.example .env
-# Ou sur Windows:
+# 3. Config
 copy .env.example .env
+# Éditer .env : ajouter OPENAI_API_KEY (minimum requis)
 
-# Éditer .env avec vos clés API
-# Requis:
-# - AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY
-# - HA_URL + HA_TOKEN
-```
-
-## 🚀 Démarrage
-
-```bash
+# 4. Lancer
 python main.py
 ```
 
-## 📋 Flux de Fonctionnement
+Dites **« Exo »** suivi de votre commande. Ctrl+C pour quitter.
 
-### 1️⃣ Réception Audio (Wyoming Protocol)
-```
-Pi Zero / Pi 5 → Wyoming Server (10700) → Core
-```
+## 🏗️ Architecture
 
-### 2️⃣ Traitement Audio → Texte
 ```
-Core → Hardware Accel (STT) → Whisper + OpenVINO
+Micro (PyAudio) → VAD adaptatif → Faster-Whisper STT
+    → Wake word "Exo" → BrainEngine (GPT-4o-mini + RAG ChromaDB)
+    → Kokoro TTS (24kHz) → Pygame playback
 ```
 
-### 3️⃣ Enrichissement Contexte
+### Matériel
+- **Serveur** : PC Windows/Linux (CPU suffisant, GPU optionnel)
+- **Satellites** : Raspberry Pi Zero 2 W / Pi 5 (via Wyoming protocol)
+- **Domotique** : Home Assistant (HUE, IKEA, Samsung, EZWIZ, Petkit)
+
+### Structure
+
 ```
-Brain Engine → ChromaDB (animaux, plan maison, prefs)
+src/
+├── core/
+│   ├── core.py              # Orchestrateur (machine d'états)
+│   └── listener.py          # Boucle d'écoute permanente (cœur d'EXO)
+├── audio/
+│   └── wake_word.py         # VAD adaptatif + détection wake word
+├── brain/
+│   ├── brain_engine.py      # LLM (GPT-4o-mini) + RAG + Function Calling
+│   └── local_info.py        # Contexte temps réel (heure, météo)
+├── assistant/
+│   └── tts_client.py        # TTS : Kokoro → Piper → OpenAI (cascade)
+├── integrations/
+│   └── home_bridge.py       # Home Assistant WebSocket + REST
+├── gui/
+│   └── visage_gui.py        # Avatar Pygame (états synchronisés)
+└── protocols/
+    └── wyoming.py           # Serveur audio distribué multi-room
+examples/
+├── test_pipeline_monitor.py # Diagnostic micro/VAD/STT en temps réel
+├── test_e2e_vocal.py        # Test E2E complet (micro → voix)
+├── test_conversation.py     # Test BrainEngine isolé
+└── pi_satellite.py          # Client Wyoming pour Raspberry Pi
 ```
 
-### 4️⃣ Appel GPT-4o
-```
-Brain Engine → Azure OpenAI (GPT-4o avec Function Calling)
-```
+## 🔧 Configuration
 
-### 5️⃣ Exécution des Actions
-```
-Function Calls → Home Bridge → Home Assistant WebSocket
-                             → Contrôle lumières, TV, caméras, Petkit
-```
-
-### 6️⃣ Génération Réponse Audio
-```
-Brain Engine → Hardware Accel (TTS) → Fish-Speech / XTTS v2
-```
-
-### 7️⃣ Affichage et Feedback
-```
-Core → Face GUI (Pygame 144Hz) → Avatar expressif
-```
-
-## 🧠 Modules Clés
-
-### `core.py` - Orchestrateur Principal
-- Machine d'états : IDLE → LISTENING → PROCESSING → RESPONDING
-- Gestion priorité audio multi-room
-- Identification pièce source
-- Coordination tous modules
-
-### `brain_engine.py` - Cerveau IA
-- Appels GPT-4o (Azure SDK + fallback REST)
-- Injection contexte ChromaDB
-- **Function Calling** :
-  - `control_light` : HUE/IKEA
-  - `control_media` : Samsung TV/Soundbar
-  - `play_music` : TIDAL via Mopidy
-  - `check_camera` : EZWIZ
-  - `check_petkit` : Statut litière
-  - `store_memory` : Mise à jour ChromaDB
-- Historique conversation (10 derniers messages)
-
-### `hardware_accel.py` - Accélération Matérielle
-- **STT** : Faster-Whisper + OpenVINO + multi-threading (8 workers pour i9)
-- **TTS** : Fish-Speech REST endpoint
-- GPU auto-detection (CUDA / AMD ROCm / CPU)
-- Benchmark performance
-
-### `home_bridge.py` - Intégration Domotique
-- WebSocket HA (temps réel)
-- REST API fallback
-- Mapping pièces → entités HA
-- Support HUE, IKEA, Samsung, EZWIZ, Petkit
-
-### `visage_gui.py` - Interface 2D
-- Rendu Pygame @ 144Hz (fluide i9)
-- Avatar minimaliste (cercles + lignes)
-- États synchronisés : IDLE / LISTENING / PROCESSING / RESPONDING / ERROR
-- Clignotement automatique
-- Spectre audio temps réel
-
-### `wyoming.py` - Serveur Audio Distribué
-- Protocol Wyoming (JSON + audio brut)
-- Multi-client WebSocket
-- Identification pièce source
-- Fallback texte direct (bypass STT)
-
-## ⚙️ Configuration Variables d'Environnement
-
-Voir `.env.example` pour la liste complète. Minimum requis :
+### Variables d'environnement (.env)
 
 ```env
-# Azure OpenAI
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_KEY=sk-...
+# ── LLM (requis — au moins un) ──
+OPENAI_API_KEY=sk-...                # OpenAI standard (GPT-4o-mini)
+# ou Azure :
+# AZURE_OPENAI_ENDPOINT=https://...
+# AZURE_OPENAI_KEY=...
 
-# Home Assistant
+# ── Domotique (optionnel) ──
 HA_URL=http://homeassistant.local:8123
 HA_TOKEN=eyJ0eXAi...
 
-# Optional
-LOG_LEVEL=INFO
-DEBUG=false
+# ── TTS ──
+TTS_ENGINE=kokoro              # kokoro|piper|openai|fish|coqui
+KOKORO_VOICE=ff_siwis          # ff_siwis, ff_alma, fm_music
+
+# ── STT ──
+WHISPER_MODEL=base             # tiny|base|small|medium|large
+
+# ── VAD ──
+EXO_VAD_MULTIPLIER=2.5        # Sensibilité micro (plus bas = plus sensible)
 ```
 
-## 📊 Performance
+Référence complète : [ENV_REFERENCE.md](ENV_REFERENCE.md)
 
-### Cibles de Latence
-- **STT** : <200ms (Faster-Whisper + GPU)
-- **LLM Appeal** : <200ms (GPT-4o)
-- **Function Call** : <50ms (HA WebSocket)
-- **TTS** : <100ms (Fish-Speech)
-- **Total E2E** : <500ms ✅
+## 🧠 Modules Clés
 
-### Optimisations
-- ✅ Asyncio/await (non-blocking I/O)
-- ✅ uvloop (meilleure perf que asyncio std)
-- ✅ OpenVINO (accélération CPU/GPU)
-- ✅ Pygame 144Hz (fluidité max)
-- ✅ WebSocket HA (latence ultra-faible vs REST)
-- ✅ ChromaDB local (RAG sans réseau)
-- ✅ Multi-threading Whisper (exploitation i9)
+| Module | Rôle |
+|--------|------|
+| `listener.py` | Boucle d'écoute permanente : micro → VAD → Whisper → wake word → Brain → TTS → playback |
+| `wake_word.py` | VAD par RMS avec seuil adaptatif, calibration bruit ambiant au démarrage |
+| `brain_engine.py` | GPT-4o-mini + RAG ChromaDB (3 collections) + Function Calling domotique |
+| `tts_client.py` | Cascade TTS : Kokoro (local, 24kHz) → Piper → OpenAI → Fish-Speech → Coqui |
+| `home_bridge.py` | Intégration Home Assistant (WebSocket temps réel + REST fallback) |
 
-## 🛠️ Développement
+## 📊 Pipeline & Latence
 
-### Ajouter une Nouvelle Action (Function Call)
+| Étape | Durée typique |
+|-------|---------------|
+| Capture VAD | ~0.5-1s (durée parole + 0.5s silence) |
+| Whisper STT (base) | ~0.5-1s |
+| Brain GPT-4o-mini | ~0.5-1.5s |
+| Kokoro TTS | ~0.8s |
+| **Total E2E** | **~2-4s** |
 
-1. Définir dans `brain.py::_define_tools()` :
-```python
-{
-    "type": "function",
-    "function": {
-        "name": "my_action",
-        "description": "...",
-        "parameters": {...}
-    }
-}
-```
+Diagnostic en temps réel : `python examples/test_pipeline_monitor.py`
 
-2. Implémenter handler dans `brain.py::_execute_functions()` ou `home_bridge.py`
+## 🛠️ Tests
 
-3. Tester avec `curl` (à venir)
-
-### Satellites Raspberry Pi
-
-**Pi Zero 2 W** : Exécute Wyoming client STT
 ```bash
-# Sur le Pi Zero
-pip install wyoming-faster-whisper
-python -m wyoming_faster_whisper --uri tcp://0.0.0.0:10700 --room pi_zero
+# Diagnostic micro + VAD + STT
+python examples/test_pipeline_monitor.py --rounds 5
+
+# Test E2E complet (micro → Brain → TTS → playback)
+python examples/test_e2e_vocal.py
+
+# Test BrainEngine seul (LLM + RAG)
+python examples/test_conversation.py
 ```
 
-**Pi 5** : Wyoming client + GUI optionnelle
+## 🐳 Docker
+
 ```bash
-# Sur le Pi 5
-python -m wyoming_faster_whisper --uri tcp://0.0.0.0:10700 --room pi_5
-# Optionnel : afficher la GUI sur Pi 5 (offscreen buffer)
+docker-compose up -d
 ```
 
-## 📝 Logs
+Guide détaillé : [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)
 
-Logs écrits dans `assistant.log` + stdout.
+## 📡 Raspberry Pi (satellites)
+
 ```bash
-tail -f assistant.log
+# Sur le Pi
+python examples/pi_satellite.py
 ```
 
-## 🐛 Troubleshooting
+Guide : [PI_SETUP.md](PI_SETUP.md)
 
-### "AZURE_OPENAI_ENDPOINT requis"
-→ Vérifier `.env` présent et rempli
+## 📝 Documentation
 
-### "Connexion HA échouée"
-→ Vérifier HA_URL accessible, token valide
-
-### "Whisper pas disponible"
-→ Installer : `pip install faster-whisper`
-
-### "Pygame non disponible"
-→ Installer : `pip install pygame`
-
-### "GUI lente (<144fps)"
-→ Réduire résolution GUI dans `.env`
-→ Vérifier GPU accessible
+| Document | Contenu |
+|----------|---------|
+| [SETUP.md](SETUP.md) | Installation détaillée (PC + Pi + domotique) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Architecture technique complète |
+| [ENV_REFERENCE.md](ENV_REFERENCE.md) | Toutes les variables d'environnement |
+| [VOICE_INTEGRATION.md](VOICE_INTEGRATION.md) | Pipeline vocal détaillé |
+| [PI_SETUP.md](PI_SETUP.md) | Déploiement Raspberry Pi |
+| [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) | Déploiement Docker |
 
 ## 📜 Licence
 
-Projet privé. Utilisation personnelle uniquement.
-
-## 🤝 Support
-
-Pour questions/bugs, consulter la documentation Azure OpenAI, Home Assistant, Faster-Whisper.
+Projet privé. Usage personnel uniquement.

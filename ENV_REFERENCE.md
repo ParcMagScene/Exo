@@ -68,7 +68,7 @@ WHISPER_MODEL=base
 EXO_VAD_MULTIPLIER=2.5
 ```
 
-### TTS (Text-to-Speech) - Kokoro + Piper + Fish-Speech + XTTS v2
+### TTS (Text-to-Speech) - Kokoro + Piper (+ fallbacks optionnels)
 
 ```env
 # ========== Moteur TTS préféré ==========
@@ -93,18 +93,12 @@ PIPER_MODEL=models/piper/fr_FR-siwis-medium.onnx
 PIPER_ENABLED=true
 
 # ========== Fish-Speech (Optionnel, via Docker) ==========
-# Endpoint du serveur Fish-Speech (HTTP REST API)
-# Si vous utilisez Docker: http://localhost:8000
+# Endpoint du serveur Fish-Speech (si disponible)
 FISH_SPEECH_URL=http://localhost:8000
 
 # ========== TTS Fallback ==========
-# Activer XTTS v2 comme fallback si tous les autres échouent
-# Options: true, false (défaut: true)
+# Activer les fallbacks si le moteur principal échoue
 TTS_FALLBACK=true
-
-# Device pour XTTS v2 (si fallback activé)
-# Options: auto, cuda, cpu (défaut: auto = auto-detect)
-XTTS_DEVICE=auto
 
 # ========== Timeout & Retry ==========
 # Timeout pour Fish-Speech en secondes (défaut: 30)

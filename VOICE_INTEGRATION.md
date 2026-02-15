@@ -1,315 +1,144 @@
-# 🎤 Voice Integration - Audio Realtime
+# 🎤 Pipeline Vocal — Architecture Audio d'EXO
 
 ## Vue d'ensemble
 
-Intégration complète du pipeline audio STT + LLM + TTS avec mesure de latence en temps réel.
+Pipeline vocal complet : capture micro → détection voix → transcription → LLM → synthèse → playback.
 
-**Status:** ✅ **IMPLÉMENTÉ ET TESTÉ**
+**Status :** ✅ Implémenté et opérationnel
 
-## Composants
-
-### 1. Audio Capture Module (`src/audio/audio_capture.py`)
-Module de capture audio en temps réel depuis le microphone avec PyAudio.
-
-**Fonctionnalités:**
-- Capture audio PCM16 à 16kHz (configurable)
-- Détection et énumération des périphériques audio
-- Mode synchrone et asynchrone
-- Détection automatique du silence
-- Callbacks pour chaque frame
-- Classe `AudioStats` pour analyser l'énergie (RMS)
-
-**Classes:**
-```python
-class AudioCapture:
-    - start_recording() / stop_recording()
-    - capture_chunk() - lecture d'une chunk async
-    - record_duration(seconds) - enregistrer X secondes
-    - record_until_silence() - enregistrer jusqu'au silence
-    - list_devices() - énumérer les micros disponibles
-```
-
-**Usage:**
-```python
-capture = AudioCapture(sample_rate=16000, channels=1)
-audio_bytes = await capture.record_duration(3.0)  # 3 secondes
-```
-
-### 2. Examples - Test Suite
-
-#### a) `examples/test_latency.py`
-Benchmark complet des composants STT, TTS et E2E.
-
-**Mesure:**
-- ✅ STT (Faster-Whisper): latence transcription
-- ✅ TTS (Fish-Speech): latence synthèse
-- ✅ E2E: latence totale pipeline
-
-**Output:**
-```
-BENCHMARK STT (Faster-Whisper) - 2 runs
-   Latence moyenne: XXX ms
-   
-BENCHMARK TTS (Fish-Speech) - 2 runs
-   Latence moyenne: YYY ms
-   
-BENCHMARK E2E (STT + LLM + TTS)
-   Total: ZZZ ms
-   ✅ Objectif <500ms: [ATTEINT/EXCÉDÉ]
-```
-
-**Exécution:**
-```bash
-python examples/test_latency.py
-```
-
-#### b) `examples/test_voice.py`
-Démo interactive voice avec modes:
-
-**Mode 1: Microphone Réel (si PyAudio disponible)**
-- Capture audio du micro (3 secondes ou jusqu'au silence)
-- Conversion STT (audio → texte)
-- Traitement LLM (texte → réponse)
-- Synthèse TTS (réponse → audio)
-- Affichage des latences détaillées
-
-**Mode 2: Simulation Texte (sans micro)**
-- Input texte simulé
-- Pipeline: STT (simulé 100ms) → LLM → TTS (simulé 200ms)
-- Montre la mesure de latence E2E
-- 2 scénarios de test (philo + domotique)
-
-**Exécution:**
-```bash
-python examples/test_voice.py
-```
-
-**Output exemple:**
-```
-🎤 MODE MICROPHONE RÉEL
-─────────────────────────────────────
-
-📋 Périphériques audio disponibles:
-   Device 0: Mappeur de sons Microsoft - Input (2 channels, 44100Hz)
-   Device 1: Speakerphone (Brio 500) (2 channels, 44100Hz)
-   ...
-
-🔴 Enregistrement... (3 secondes)
-✓ Audio capturé (90112 bytes)
-
-[1/3] STT (audio → texte)...
-✓ Transcription: 'bonjour comment allez vous'
-  Latence: 250.45 ms
-
-[2/3] LLM (texte → réponse)...
-✓ Réponse: 'Bonjour! Je vais bien, merci de...'
-  Latence: 450.23 ms
-
-[3/3] TTS (réponse → audio)...
-✓ Audio générée (48000 bytes)
-  Latence: 320.10 ms
-
-⏱️  LATENCE DÉTAILLÉE:
-   🎤 STT:   250.45 ms
-   🧠 LLM:   450.23 ms
-   🔊 TTS:   320.10 ms
-   ────────────────────
-   ⌛ TOTAL: 1020.78 ms
-   ⚠️  Objectif <500ms: excédé de +520ms
-```
-
-### 3. Bug Fixes et Optimisations
-
-**Config.py:**
-- Rendu des validations optionnelles (via `SUPPRESS_CONFIG_WARNINGS`)
-- Permet le lancement sans tous les secrets Azure/HA
-
-**Brain Engine:**
-- Corrigé les f-strings multilignes avec caractères spéciaux
-- Ajouté paramètres `temperature` et `max_tokens` personnalisables
-
-## Architecture Pipeline Audio
+## Pipeline
 
 ```
 ┌──────────────┐
-│ Microphone   │
-│  (PyAudio)   │
+│  Microphone  │  PyAudio (16kHz, mono, PCM16)
+│   (PyAudio)  │
 └──────┬───────┘
-       │ PCM16 @ 16kHz
+       │
        ▼
 ┌──────────────────┐
-│  AudioCapture    │
-│ record_duration()│
+│  VAD Adaptatif   │  wake_word.py — calibration bruit ambiant
+│  (RMS energy)    │  seuil dynamique = noise_floor × multiplicateur
 └──────┬───────────┘
-       │ bytes (audio)
+       │ bytes (utterance complète)
        ▼
-┌──────────────────────┐
-│  HardwareAccelerator │
-│ transcribe_audio()   │ ◄─── STT (Faster-Whisper + OpenVINO)
-└──────┬───────────────┘
-       │ str (text)
+┌──────────────────┐
+│  Faster-Whisper  │  STT — modèle "base" (configurable)
+│  (beam_size=1)   │  langue: FR, exécution dans executor thread
+└──────┬───────────┘
+       │ str (transcription)
        ▼
-┌─────────────────────┐
-│   BrainEngine       │
-│ process_command()   │ ◄─── LLM (GPT-4o avec RAG)
-└──────┬──────────────┘
-       │ dict (response)
+┌──────────────────┐
+│  Wake Word       │  Détection "Exo" (13 variantes phonétiques)
+│  + Extraction    │  Extraction commande après wake word
+└──────┬───────────┘
+       │ str (commande)
        ▼
-┌──────────────────────┐
-│ HardwareAccelerator  │
-│ text_to_speech()     │ ◄─── TTS (Fish-Speech)
-└──────┬───────────────┘
-       │ bytes (audio)
+┌──────────────────┐
+│  BrainEngine     │  GPT-4o-mini + RAG ChromaDB + Function Calling
+│  (GPT-4o-mini)   │  max_tokens=80, contexte local (heure, météo)
+└──────┬───────────┘
+       │ str (réponse)
        ▼
-   ┌───────┐
-   │ Output│ (speaker/file)
-   └───────┘
+┌──────────────────┐
+│  Kokoro TTS      │  Synthèse locale 24kHz, voix ff_siwis
+│  (cascade)       │  Fallback: Piper → OpenAI → Fish-Speech → Coqui
+└──────┬───────────┘
+       │ bytes (WAV)
+       ▼
+┌──────────────────┐
+│  Pygame mixer    │  Playback synchrone, micro coupé pendant réponse
+│  (playback)      │
+└──────────────────┘
 ```
 
-**Mesure de latence à chaque étape:**
+## Composants
 
-```python
-async def full_pipeline():
-    # 1. Capture
-    stt_start = time.time()
-    text = await hardware.transcribe_audio(audio)
-    stt_latency_ms = (time.time() - stt_start) * 1000
-    
-    # 2. LLM
-    llm_start = time.time()
-    response = await brain.process_command(text)
-    llm_latency_ms = (time.time() - llm_start) * 1000
-    
-    # 3. TTS
-    tts_start = time.time()
-    audio_out = await hardware.text_to_speech(response['text'])
-    tts_latency_ms = (time.time() - tts_start) * 1000
-    
-    total_ms = stt_latency_ms + llm_latency_ms + tts_latency_ms
-```
+### 1. VAD — Voice Activity Detection (`src/audio/wake_word.py`)
 
-## Dépendances
+Détection d'activité vocale par énergie RMS avec seuil adaptatif.
 
-**Requises pour audio capture:**
+| Paramètre | Valeur | Description |
+|-----------|--------|-------------|
+| `VOICE_THRESHOLD` | 300 RMS | Seuil fixe (ajusté par l'adaptatif) |
+| `SILENCE_CHUNKS` | 8 (~0.5s) | Silence requis pour fin d'utterance |
+| `MIN_UTTERANCE_SEC` | 0.5s | Durée minimum d'une utterance valide |
+| `MIN_VOICE_CHUNKS` | 4 | Chunks vocaux minimum (filtre bruit) |
+| `EXO_VAD_MULTIPLIER` | 2.5 | Multiplicateur bruit ambiant → seuil |
+
+**Calibration automatique :** Au démarrage, mesure 30 chunks de bruit ambiant (médiane RMS). Le seuil effectif = `noise_floor × EXO_VAD_MULTIPLIER`, borné entre 50% et 150% du seuil fixe.
+
+### 2. STT — Speech-to-Text (`src/core/listener.py`)
+
+Faster-Whisper avec exécution dans un thread executor (non-bloquant).
+
+| Paramètre | Valeur | Description |
+|-----------|--------|-------------|
+| `WHISPER_MODEL` | base | Modèle (tiny/base/small/medium/large) |
+| `beam_size` | 1 | Recherche greedy (plus rapide) |
+| `language` | fr | Langue forcée français |
+| Compute | CPU, float32 | Compatible tous systèmes |
+
+**Latence mesurée :** ~0.5-1.5s (modèle "base" sur CPU)
+
+**Filtre hallucinations :** Les transcriptions parasites de Whisper sur le silence ("sous-titres", "amara.org", "merci d'avoir regardé"...) sont automatiquement rejetées.
+
+### 3. Wake Word (`src/audio/wake_word.py`)
+
+Détection du mot "Exo" dans la transcription Whisper.
+
+**Variantes reconnues :** exo, écho, echo, expo, ego, exc, exot, x.o, x o, exau, exeau, exos, exho
+
+**Extraction commande :** "Exo, quelle heure est-il ?" → "quelle heure est-il ?"
+
+### 4. TTS — Text-to-Speech (`src/assistant/tts_client.py`)
+
+Cascade de moteurs TTS par ordre de priorité :
+
+| Priorité | Moteur | Type | Latence | Qualité |
+|----------|--------|------|---------|---------|
+| 1 | **Kokoro** | Local | ~0.8s | Haute (quasi-humaine) |
+| 2 | Piper | Local | ~0.3s | Bonne |
+| 3 | OpenAI TTS-1 | API | ~1-2s | Très haute |
+| 4 | Fish-Speech | API | Variable | Bonne |
+| 5 | Coqui VITS | Local | ~2-3s | Moyenne |
+
+### 5. Playback (`src/core/listener.py`)
+
+- Pygame mixer initialisé au sample rate du TTS actif (24kHz pour Kokoro)
+- Micro coupé pendant la réponse (anti-écho)
+- Buffer micro vidé après playback
+
+## Latence End-to-End
+
+| Étape | Durée typique |
+|-------|---------------|
+| Capture VAD | 0.5-1s (parole + 0.5s silence) |
+| Whisper STT | 0.5-1.5s |
+| Brain GPT-4o-mini | 0.5-1.5s |
+| Kokoro TTS | ~0.8s |
+| **Total** | **~2-4s** |
+
+## Diagnostic
+
 ```bash
-pip install pyaudio
-```
+# Monitoring temps réel (niveaux micro, VAD, STT, wake word)
+python examples/test_pipeline_monitor.py --rounds 5
 
-**Optionnelles pour STT/TTS optimisé:**
-```bash
-pip install faster-whisper     # STT avec GPU/OpenVINO
-pip install numpy              # Audio processing
-pip install numba              # Accélération Whisper
+# Test E2E complet avec réponse vocale
+python examples/test_e2e_vocal.py
 ```
-
-**Pour Fish-Speech TTS:**
-- Déployer Docker: `docker run -p 8000:8000 fish-speech` 
-- Ou serveur HTTP à `localhost:8000` (configurable en `.env`)
 
 ## Configuration
 
-Ajouter à `.env`:
-
-```ini
-# Audio Capture
-AUDIO_SAMPLE_RATE=16000
-AUDIO_CHANNELS=1
-AUDIO_CHUNK_SIZE=1024
-
+```env
 # STT
-WHISPER_WORKERS=8        # Nombre de workers
-DEVICE=auto              # cuda, cpu, auto
+WHISPER_MODEL=base             # tiny|base|small|medium|large
+
+# VAD
+EXO_VAD_MULTIPLIER=2.5        # Sensibilité (plus bas = plus sensible)
 
 # TTS
-FISH_SPEECH_ENDPOINT=http://localhost:8000
+TTS_ENGINE=kokoro              # kokoro|piper|openai|fish|coqui
+KOKORO_VOICE=ff_siwis          # Voix française
+KOKORO_LANG=f                  # f = français
 ```
-
-## Cas d'usage
-
-### 1. Conversation vocale directe
-```python
-assistant = VoiceAssistant()
-await assistant.run_interactive_demo()
-```
-
-### 2. Benchmark de latence
-```bash
-python examples/test_latency.py
-# Mesure STT, TTS et E2E
-```
-
-### 3. Test de performances
-```bash
-python examples/test_performance.py
-# Identifie les goulots d'étranglement
-```
-
-## Targets de Latence
-
-**Objectif global:** <500ms E2E
-
-**Breakdown indicatif** (i9-11900KF + GPU):
-- STT (3s audio): ~150-250ms
-- LLM (GPT-4o requête): ~200-400ms  
-- TTS (synthèse): ~100-200ms
-- **Total objectif:** ~500-900ms
-
-## Intégration avec Wyoming Protocol
-
-Pour multi-room audio avec Raspberry Pi:
-
-```python
-# Pi satellites envoient audio via Wyoming
-wyoming_server = WyomingServer(host="0.0.0.0", port=10700)
-await wyoming_server.start()
-
-# Central server reçoit audio de plusieurs Pi
-# Et utilise VoiceAssistant pour traitement
-```
-
-## État Actuel
-
-✅ **Implémenté:**
-- [x] AudioCapture module (PyAudio)
-- [x] Test suite (latency benchmark)
-- [x] Voice demo interactive
-- [x] Mesure latence détaillée
-- [x] Support microphone réel
-- [x] Mode simulation (sans dépendances)
-- [x] Config optionnelle
-
-⚠️ **Optionnel (dépendances externes):**
-- [ ] Faster-Whisper (pas installé par défaut)
-- [ ] Fish-Speech (service Docker)
-- [ ] Azure OpenAI SDK (fallback REST disponible)
-
-## Prochaines étapes
-
-1. **Installer dépendances audio:**
-   ```bash
-   pip install pyaudio faster-whisper numpy
-   ```
-
-2. **Lancer Fish-Speech Docker:**
-   ```bash
-   docker run -p 8000:8000 fish-audio/fish-speech:latest
-   ```
-
-3. **Configurer `.env` avec Azure credentials**
-
-4. **Tester la démo complète:**
-   ```bash
-   python examples/test_voice.py
-   ```
-
-5. **Déployer sur Raspberry Pi satellites avec Wyoming protocol**
-
-## Améliorations futures
-
-- [ ] WebRTC pour latence ultra-faible (<100ms)
-- [ ] GPU optimization pour STT/TTS
-- [ ] Streaming audio (ne pas attendre fin phrase)
-- [ ] Multi-user queue gestion
-- [ ] Voice activity detection (VAD) pour silence automatique
-- [ ] Cache responses similaires pour latence réduite
-- [ ] Support multiple languages
