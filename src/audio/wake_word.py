@@ -14,6 +14,7 @@ import asyncio
 import logging
 import os
 import time
+from collections import deque
 from typing import Optional
 import numpy as np
 
@@ -38,8 +39,10 @@ DEFAULT_MAX_UTTERANCE_SEC = 15.0   # Sécurité max
 DEFAULT_MIN_VOICE_CHUNKS = 4       # Au moins 4 chunks vocaux (réduit de 8)
 
 # ─── Seuil adaptatif ─────────────────────────────────────
-ADAPTIVE_MULTIPLIER = float(os.environ.get("EXO_VAD_MULTIPLIER", "2.5"))
+ADAPTIVE_MULTIPLIER = float(os.environ.get("EXO_VAD_MULTIPLIER", "3.0"))
 NOISE_FLOOR_SAMPLES = 30           # Nb chunks pour calibrer le bruit ambiant
+SILENCE_WINDOW_SIZE = 25           # ~1.6s fenêtre glissante pour fin de parole
+SILENCE_END_RATIO = 0.25           # < 25% voix dans la fenêtre → parole terminée
 
 # ─── Hallucinations Whisper connues (filtrées) ───────────
 WHISPER_HALLUCINATIONS = [
@@ -148,7 +151,7 @@ def get_adaptive_threshold(fixed_threshold: float) -> float:
         adaptive = _noise_floor * ADAPTIVE_MULTIPLIER
         # Prendre le max pour éviter les faux positifs, mais plafonner
         # pour ne pas devenir sourd dans un environnement bruyant
-        return max(min(adaptive, fixed_threshold * 1.5), fixed_threshold * 0.5)
+        return max(min(adaptive, fixed_threshold * 2.5), fixed_threshold * 0.5)
     return fixed_threshold
 
 
@@ -196,6 +199,7 @@ async def capture_utterance(
     timeout_chunks = int(timeout_sec * sample_rate / chunk_size) if timeout_sec else None
     wait_chunks = 0
     min_voice = DEFAULT_MIN_VOICE_CHUNKS
+    recent_voice = deque(maxlen=SILENCE_WINDOW_SIZE)  # Fenêtre glissante
 
     while total_chunks < max_chunks:
         try:
@@ -222,14 +226,24 @@ async def capture_utterance(
         else:
             buffer += data
             total_chunks += 1
+            is_voice_chunk = energy >= effective_threshold
+            recent_voice.append(is_voice_chunk)
 
-            if energy < effective_threshold:
+            if not is_voice_chunk:
                 silent_count += 1
                 if silent_count >= silence_chunks_end:
                     break
             else:
                 silent_count = 0
                 voice_chunks += 1
+
+            # Fin de parole robuste : fenêtre glissante
+            # Résiste aux pics de bruit sporadiques qui reset le compteur consécutif
+            if (voice_chunks >= min_voice
+                    and len(recent_voice) >= SILENCE_WINDOW_SIZE):
+                voice_ratio = sum(recent_voice) / len(recent_voice)
+                if voice_ratio < SILENCE_END_RATIO:
+                    break
 
         await asyncio.sleep(0.001)
 

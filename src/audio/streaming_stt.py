@@ -16,6 +16,7 @@ import asyncio
 import concurrent.futures
 import logging
 import time
+from collections import deque
 from typing import Dict, Optional, Tuple
 
 import numpy as np
@@ -26,6 +27,8 @@ from src.audio.wake_word import (
     DEFAULT_MIN_VOICE_CHUNKS,
     DEFAULT_SILENCE_CHUNKS,
     DEFAULT_VOICE_THRESHOLD,
+    SILENCE_END_RATIO,
+    SILENCE_WINDOW_SIZE,
     calibrate_noise_floor,
     get_adaptive_threshold,
     is_hallucination,
@@ -112,8 +115,7 @@ async def streaming_capture_and_transcribe(
     last_transcript = ""
     last_submit_offset = 0      # byte offset lors du dernier submit
     voice_since_submit = 0      # chunks vocaux depuis dernier submit
-    interval_bytes = int(TRANSCRIBE_INTERVAL_SEC * sample_rate * 2)  # PCM16
-
+    interval_bytes = int(TRANSCRIBE_INTERVAL_SEC * sample_rate * 2)  # PCM16    recent_voice = deque(maxlen=SILENCE_WINDOW_SIZE)  # Fenêtre glissante
     t0_capture = time.time()
 
     while total_chunks < max_chunks:
@@ -142,8 +144,10 @@ async def streaming_capture_and_transcribe(
         else:
             buffer += data
             total_chunks += 1
+            is_voice_chunk = energy >= effective_threshold
+            recent_voice.append(is_voice_chunk)
 
-            if energy < effective_threshold:
+            if not is_voice_chunk:
                 silent_count += 1
                 if silent_count >= silence_chunks_end:
                     break
@@ -152,12 +156,23 @@ async def streaming_capture_and_transcribe(
                 voice_chunks += 1
                 voice_since_submit += 1
 
+            # Fin de parole robuste : fenêtre glissante
+            if (voice_chunks >= DEFAULT_MIN_VOICE_CHUNKS
+                    and len(recent_voice) >= SILENCE_WINDOW_SIZE):
+                voice_ratio = sum(recent_voice) / len(recent_voice)
+                if voice_ratio < SILENCE_END_RATIO:
+                    break
+
             # ─── Soumettre transcription si assez de nouvel audio ───
             new_bytes = len(buffer) - last_submit_offset
             if (new_bytes >= interval_bytes
                     and pending_future is None
                     and voice_chunks >= DEFAULT_MIN_VOICE_CHUNKS):
                 snapshot = bytes(buffer)
+                # Plafonner le buffer intermédiaire à 8s (évite O(n²) si capture longue)
+                max_stt_bytes = int(8.0 * sample_rate * 2)
+                if len(snapshot) > max_stt_bytes:
+                    snapshot = snapshot[-max_stt_bytes:]
                 pending_future = loop.run_in_executor(
                     executor, _transcribe_buffer, whisper_model, snapshot
                 )
@@ -178,6 +193,9 @@ async def streaming_capture_and_transcribe(
 
     capture_time = time.time() - t0_capture
     duration = len(buffer) / (sample_rate * 2)
+    logger.debug("📊 Capture: %.1fs, %d voice/%d total chunks, fenêtre finale: %s",
+                 capture_time, voice_chunks, total_chunks,
+                 f"{sum(recent_voice)/len(recent_voice):.0%}" if recent_voice else "n/a")
 
     # ─── Vérifications minimum ────────────────────────────
     if duration < min_sec or voice_chunks < DEFAULT_MIN_VOICE_CHUNKS:
