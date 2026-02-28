@@ -115,7 +115,8 @@ async def streaming_capture_and_transcribe(
     last_transcript = ""
     last_submit_offset = 0      # byte offset lors du dernier submit
     voice_since_submit = 0      # chunks vocaux depuis dernier submit
-    interval_bytes = int(TRANSCRIBE_INTERVAL_SEC * sample_rate * 2)  # PCM16    recent_voice = deque(maxlen=SILENCE_WINDOW_SIZE)  # Fenêtre glissante
+    interval_bytes = int(TRANSCRIBE_INTERVAL_SEC * sample_rate * 2)  # PCM16
+    recent_voice = deque(maxlen=SILENCE_WINDOW_SIZE)  # Fenêtre glissante
     t0_capture = time.time()
 
     while total_chunks < max_chunks:
