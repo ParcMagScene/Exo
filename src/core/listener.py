@@ -168,6 +168,7 @@ class ExoListener:
             log_prob_threshold=-1.5,
             vad_filter=False,
             condition_on_previous_text=False,
+            without_timestamps=True,
         )
         return " ".join(seg.text for seg in segments).strip()
 
@@ -300,8 +301,9 @@ class ExoListener:
                     continue
 
                 # Filtrer les hallucinations Whisper (bruit de fond)
-                if is_hallucination(transcript):
-                    logger.debug("Hallucination filtrée : « %s »", transcript)
+                audio_sec = timing.get("audio_sec", 0)
+                if is_hallucination(transcript, audio_sec):
+                    logger.debug("Hallucination filtrée : « %s » (%.1fs audio)", transcript, audio_sec)
                     continue
 
                 reused_tag = " ⚡réutilisé" if timing.get("reused") else ""

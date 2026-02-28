@@ -13,6 +13,7 @@ Fonctionnalités:
 import asyncio
 import logging
 import os
+import re
 import time
 from collections import deque
 from typing import Optional
@@ -28,6 +29,9 @@ WAKE_WORDS = [
     # Variantes supplémentaires observées avec Whisper FR
     "exeau", "esso", "ekso", "ex-o", "axo", "hecho",
     "ex o", "ex-eau", " exo", "exo ", "ecso",
+    # Variantes observées dans les logs réels (Whisper base, FR)
+    "et que", "èque", "ek-o", "l'exo", "l'écho",
+    "exa", "eko", "exau", "equo",
 ]
 
 # ─── VAD Configuration ───────────────────────────────────
@@ -35,8 +39,8 @@ WAKE_WORDS = [
 DEFAULT_VOICE_THRESHOLD = 300       # RMS seuil pour "voix active" (abaissé de 500)
 DEFAULT_SILENCE_CHUNKS = 8         # ~0.5s de silence = fin d'utterance (réduit de 12)
 DEFAULT_MIN_UTTERANCE_SEC = 0.5    # Ignorer bruits < 0.5s (réduit de 0.8)
-DEFAULT_MAX_UTTERANCE_SEC = 15.0   # Sécurité max
-DEFAULT_MIN_VOICE_CHUNKS = 4       # Au moins 4 chunks vocaux (réduit de 8)
+DEFAULT_MAX_UTTERANCE_SEC = 10.0   # Sécurité max (réduit de 15 pour éviter captures infinies)
+DEFAULT_MIN_VOICE_CHUNKS = 6       # Au moins 6 chunks vocaux (~0.4s de voix réelle)
 
 # ─── Seuil adaptatif ─────────────────────────────────────
 ADAPTIVE_MULTIPLIER = float(os.environ.get("EXO_VAD_MULTIPLIER", "3.0"))
@@ -46,16 +50,23 @@ SILENCE_END_RATIO = 0.25           # < 25% voix dans la fenêtre → parole term
 
 # ─── Hallucinations Whisper connues (filtrées) ───────────
 WHISPER_HALLUCINATIONS = [
-    "sous-titres réalisés par",
-    "sous-titrage",
+    # Patterns classiques de hallucination Whisper FR
+    "sous-titres", "sous-titrage", "sous-titré",
     "amara.org",
-    "merci d'avoir regardé",
-    "merci de votre attention",
+    "merci d'avoir regardé", "merci de votre attention",
     "traduisez", "subscribe", "abonnez",
     "...", "…", "♪", "🎵",
-    "fin de la vidéo",
+    "fin de la vidéo", "fin de votre vidéo",
     "contributions de",
     "[musique]", "[applaudissements]", "[rires]",
+    # Patterns observés dans les logs réels
+    "je vous invite vous",
+    "visage de sauvage", "visage de la vise",
+    "caractéristiques",
+    "je vous remercie",
+    "l'économie de la",
+    "il y a un visage",
+    "la fin de votre",
 ]
 
 
@@ -67,15 +78,36 @@ def rms_energy(audio_bytes: bytes) -> float:
     return float(np.sqrt(np.mean(samples ** 2)))
 
 
-def is_hallucination(text: str) -> bool:
-    """Détecte les hallucinations connues de Whisper sur le silence."""
+def is_hallucination(text: str, audio_duration_sec: float = 0.0) -> bool:
+    """Détecte les hallucinations connues de Whisper sur le silence.
+
+    Args:
+        text: Texte transcrit par Whisper
+        audio_duration_sec: Durée de l'audio source (0 = pas de vérif ratio)
+    """
     text_lower = text.lower().strip()
-    # Texte trop court ou que des points/espaces
-    clean = text_lower.replace(".", "").replace(" ", "").replace("…", "")
+    # Texte trop court ou que de la ponctuation/espaces
+    clean = re.sub(r'[^\w]', '', text_lower)  # Ne garder que lettres/chiffres
     if len(clean) < 3:
         return True
+    # Phrases connues de hallucination
     for h in WHISPER_HALLUCINATIONS:
         if h in text_lower:
+            return True
+    # Heuristique ratio : si trop de mots par seconde d'audio → hallucination
+    # Parole normale FR ≈ 2-4 mots/sec. Whisper qui hallucine produit 10+ mots/sec
+    if audio_duration_sec > 0.3:
+        word_count = len(text_lower.split())
+        words_per_sec = word_count / audio_duration_sec
+        if words_per_sec > 6.0:
+            logger.debug("Hallucination ratio: %.1f mots/s pour %.1fs audio: %s",
+                         words_per_sec, audio_duration_sec, text[:60])
+            return True
+    # Texte avec beaucoup de répétitions → hallucination
+    words = text_lower.split()
+    if len(words) >= 8:
+        unique = set(words)
+        if len(unique) / len(words) < 0.4:  # < 40% mots uniques
             return True
     return False
 

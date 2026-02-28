@@ -53,6 +53,7 @@ def _transcribe_buffer(whisper_model, audio_bytes: bytes) -> str:
         log_prob_threshold=-1.5,
         vad_filter=False,
         condition_on_previous_text=False,  # Évite dérives, accélère
+        without_timestamps=True,            # Accélère la transcription
     )
     return " ".join(seg.text for seg in segments).strip()
 
@@ -184,7 +185,7 @@ async def streaming_capture_and_transcribe(
             if pending_future is not None and pending_future.done():
                 try:
                     result = pending_future.result()
-                    if result and not is_hallucination(result):
+                    if result and not is_hallucination(result, duration):
                         last_transcript = result
                 except Exception:
                     pass
@@ -211,7 +212,7 @@ async def streaming_capture_and_transcribe(
     if pending_future is not None:
         try:
             result = await pending_future
-            if result and not is_hallucination(result):
+            if result and not is_hallucination(result, duration):
                 last_transcript = result
         except Exception:
             pass
@@ -238,7 +239,7 @@ async def streaming_capture_and_transcribe(
     )
     stt_time = time.time() - t0_stt
 
-    if not transcript or is_hallucination(transcript):
+    if not transcript or is_hallucination(transcript, duration):
         transcript = last_transcript  # fallback sur le dernier bon résultat
 
     logger.info(
