@@ -38,8 +38,8 @@ from src.audio.wake_word import (
 logger = logging.getLogger(__name__)
 
 # ─── Configuration streaming ─────────────────────────────
-TRANSCRIBE_INTERVAL_SEC = 0.5   # Intervalle min entre soumissions Whisper (réduit pour int8 rapide)
-REUSE_VOICE_THRESHOLD = 15      # Si < N chunks vocaux dans le tail → réutiliser résultat streaming
+TRANSCRIBE_INTERVAL_SEC = 0.5   # Intervalle min entre soumissions Whisper
+REUSE_VOICE_THRESHOLD = 10      # Si < N chunks vocaux dans le tail → réutiliser résultat streaming
 
 
 def _transcribe_buffer(whisper_model, audio_bytes: bytes) -> str:
@@ -67,14 +67,11 @@ async def streaming_capture_and_transcribe(
     silence_chunks_end: int = DEFAULT_SILENCE_CHUNKS,
     min_sec: float = DEFAULT_MIN_UTTERANCE_SEC,
     max_sec: float = DEFAULT_MAX_UTTERANCE_SEC,
+    min_voice_chunks: int = DEFAULT_MIN_VOICE_CHUNKS,
     timeout_sec: Optional[float] = None,
     executor: Optional[concurrent.futures.ThreadPoolExecutor] = None,
 ) -> Tuple[str, bytes, Dict]:
     """Capture audio avec VAD + transcription Whisper en parallèle.
-
-    Même logique VAD que capture_utterance(), mais lance des transcriptions
-    Whisper en arrière-plan pendant la capture. Quand le silence est détecté,
-    la transcription est souvent déjà disponible → on économise ~0.5-1s.
 
     Args:
         stream: PyAudio stream ouvert en input
@@ -85,6 +82,7 @@ async def streaming_capture_and_transcribe(
         silence_chunks_end: Chunks silencieux consécutifs = fin d'utterance
         min_sec: Durée minimum d'une utterance valide
         max_sec: Durée maximum (sécurité)
+        min_voice_chunks: Minimum de chunks vocaux pour valider l'utterance
         timeout_sec: Abandon si aucune voix après ce délai
         executor: ThreadPoolExecutor dédié pour Whisper (None = pool par défaut)
 
@@ -159,7 +157,7 @@ async def streaming_capture_and_transcribe(
                 voice_since_submit += 1
 
             # Fin de parole robuste : fenêtre glissante
-            if (voice_chunks >= DEFAULT_MIN_VOICE_CHUNKS
+            if (voice_chunks >= min_voice_chunks
                     and len(recent_voice) >= SILENCE_WINDOW_SIZE):
                 voice_ratio = sum(recent_voice) / len(recent_voice)
                 if voice_ratio < SILENCE_END_RATIO:
@@ -169,7 +167,7 @@ async def streaming_capture_and_transcribe(
             new_bytes = len(buffer) - last_submit_offset
             if (new_bytes >= interval_bytes
                     and pending_future is None
-                    and voice_chunks >= DEFAULT_MIN_VOICE_CHUNKS):
+                    and voice_chunks >= min_voice_chunks):
                 snapshot = bytes(buffer)
                 # Plafonner le buffer intermédiaire à 8s (évite O(n²) si capture longue)
                 max_stt_bytes = int(8.0 * sample_rate * 2)
@@ -201,9 +199,11 @@ async def streaming_capture_and_transcribe(
                  f"{sum(recent_voice)/len(recent_voice):.0%}" if recent_voice else "n/a")
 
     # ─── Vérifications minimum ────────────────────────────
-    if duration < min_sec or voice_chunks < DEFAULT_MIN_VOICE_CHUNKS:
+    if duration < min_sec or voice_chunks < min_voice_chunks:
         if pending_future and not pending_future.done():
             pending_future.cancel()
+        logger.debug("❌ Rejeté : durée=%.2fs (min=%.2f), voice_chunks=%d (min=%d)",
+                     duration, min_sec, voice_chunks, min_voice_chunks)
         return "", b"", {}
 
     # ─── Récupérer la meilleure transcription ─────────────
@@ -224,8 +224,8 @@ async def streaming_capture_and_transcribe(
         # ⚡ La transcription streaming couvre toute la parole → réutiliser !
         stt_time = time.time() - t0_stt
         logger.info(
-            "⚡ STT streaming : réutilisé (%.0fms attente, %d voice chunks tail)",
-            stt_time * 1000, voice_since_submit,
+            "⚡ STT streaming : réutilisé (%.0fms attente, %d voice chunks tail) → « %s »",
+            stt_time * 1000, voice_since_submit, last_transcript[:60],
         )
         return last_transcript, buffer, {
             "capture_sec": capture_time,
@@ -241,11 +241,13 @@ async def streaming_capture_and_transcribe(
     stt_time = time.time() - t0_stt
 
     if not transcript or is_hallucination(transcript, duration):
+        if transcript:
+            logger.debug("🚫 STT filtré (hallucination?) : « %s » (%.1fs audio)", transcript[:80], duration)
         transcript = last_transcript  # fallback sur le dernier bon résultat
 
     logger.info(
-        "📝 STT streaming : transcription finale (%.2fs, %d voice chunks tail)",
-        stt_time, voice_since_submit,
+        "📝 STT streaming : transcription finale (%.2fs, %d voice chunks tail) → « %s »",
+        stt_time, voice_since_submit, (transcript or "[vide]")[:60],
     )
     return transcript, buffer, {
         "capture_sec": capture_time,

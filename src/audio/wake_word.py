@@ -38,9 +38,9 @@ WAKE_WORDS = [
 # Seuils abaissés pour capter les voix douces et commandes courtes
 DEFAULT_VOICE_THRESHOLD = 300       # RMS seuil pour "voix active" (abaissé de 500)
 DEFAULT_SILENCE_CHUNKS = 5         # ~0.32s de silence consécutif = fin rapide
-DEFAULT_MIN_UTTERANCE_SEC = 0.8    # Ignorer bruits < 0.8s
-DEFAULT_MAX_UTTERANCE_SEC = 10.0   # Sécurité max (réduit de 15 pour éviter captures infinies)
-DEFAULT_MIN_VOICE_CHUNKS = 10      # Au moins 10 chunks vocaux (~0.64s de voix réelle)
+DEFAULT_MIN_UTTERANCE_SEC = 0.5    # Ignorer bruits < 0.5s (abaissé pour commandes courtes)
+DEFAULT_MAX_UTTERANCE_SEC = 10.0   # Sécurité max
+DEFAULT_MIN_VOICE_CHUNKS = 5       # Au moins 5 chunks vocaux (~0.32s de voix réelle)
 
 # ─── Seuil adaptatif ─────────────────────────────────────
 ADAPTIVE_MULTIPLIER = float(os.environ.get("EXO_VAD_MULTIPLIER", "3.0"))
@@ -78,6 +78,9 @@ WHISPER_HALLUCINATIONS = [
     "l'exil",
     "à protection",
     "au-delà",
+    "c'est la vie",
+    "c'est une bonne",
+    "si la vie",
 ]
 
 
@@ -106,11 +109,12 @@ def is_hallucination(text: str, audio_duration_sec: float = 0.0) -> bool:
         if h in text_lower:
             return True
     # Heuristique ratio : si trop de mots par seconde d'audio → hallucination
-    # Parole normale FR ≈ 2-3 mots/sec. Whisper qui hallucine produit bcp plus
-    if audio_duration_sec > 0.3:
+    # Parole normale FR ≈ 2-4 mots/sec. Whisper qui hallucine produit 6+ mots/sec
+    # Seulement fiable pour audio > 1.0s (ratio peu fiable sur clips très courts)
+    if audio_duration_sec > 1.0:
         word_count = len(text_lower.split())
         words_per_sec = word_count / audio_duration_sec
-        if words_per_sec > 4.0:
+        if words_per_sec > 6.0:
             logger.debug("Hallucination ratio: %.1f mots/s pour %.1fs audio: %s",
                          words_per_sec, audio_duration_sec, text[:60])
             return True

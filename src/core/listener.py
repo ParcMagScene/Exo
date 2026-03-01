@@ -323,15 +323,12 @@ class ExoListener:
                 # ── Étape 4 : Extraire la commande ────────
                 command = extract_command_after_wake(transcript)
 
-                if len(command.split()) >= 2:
-                    # Commande déjà dans l'utterance
+                if command.strip():
+                    # Commande déjà dans l'utterance (même 1 mot suffit)
                     await self._process_command(command)
                 else:
                     # Juste "Exo" → attendre la suite
-                    if command:
-                        logger.info("Fragment : « %s » — attente suite...", command)
-                    else:
-                        logger.info("Juste « Exo » — attente commande...")
+                    logger.info("Juste « Exo » — attente commande...")
                     logger.info("🎤 Parlez maintenant (timeout %ds)...", FOLLOWUP_TIMEOUT_SEC)
 
                     # Retry loop avec timeout réel (évite les faux timeouts par bruit)
@@ -341,26 +338,29 @@ class ExoListener:
                         remaining = deadline - time.time()
                         if remaining <= 0:
                             break
-                        text, _, _ = await streaming_capture_and_transcribe(
+                        text, _, ftiming = await streaming_capture_and_transcribe(
                             self._stream,
                             self._whisper,
                             sample_rate=SAMPLE_RATE,
                             chunk_size=CHUNK_SIZE,
                             min_sec=0.3,
+                            min_voice_chunks=3,  # Seuil bas pour followup
                             timeout_sec=remaining,
                             executor=self._whisper_executor,
                         )
-                        if text:
+                        if text and not is_hallucination(text, ftiming.get("audio_sec", 0)):
                             followup_text = text
-                            break  # Vrai audio capturé + transcrit
+                            logger.info("💬 Followup capturé : « %s »", text)
+                            break
+                        elif text:
+                            logger.debug("👻 Followup filtré (hallucination) : « %s »", text)
 
                     if not followup_text:
                         logger.warning("⏱ Timeout — aucune commande après « Exo »")
                         logger.info("👂 En écoute...")
                         continue
 
-                    full_command = (command + " " + followup_text).strip() if command else followup_text
-                    await self._process_command(full_command)
+                    await self._process_command(followup_text)
 
                 logger.info("─" * 55)
                 logger.info("👂 En écoute — dites « Exo » pour activer.")
