@@ -86,7 +86,7 @@ class ExoListener:
             lambda: WhisperModel(
                 self.whisper_model_name,
                 device="cpu",
-                compute_type="float32",
+                compute_type="int8",
             ),
         )
         logger.info("✅ Whisper OK (modèle: %s, chargé en %.1fs)", self.whisper_model_name, time.time() - t0)

@@ -37,7 +37,7 @@ WAKE_WORDS = [
 # ─── VAD Configuration ───────────────────────────────────
 # Seuils abaissés pour capter les voix douces et commandes courtes
 DEFAULT_VOICE_THRESHOLD = 300       # RMS seuil pour "voix active" (abaissé de 500)
-DEFAULT_SILENCE_CHUNKS = 8         # ~0.5s de silence = fin d'utterance (réduit de 12)
+DEFAULT_SILENCE_CHUNKS = 5         # ~0.32s de silence consécutif = fin rapide
 DEFAULT_MIN_UTTERANCE_SEC = 0.8    # Ignorer bruits < 0.8s
 DEFAULT_MAX_UTTERANCE_SEC = 10.0   # Sécurité max (réduit de 15 pour éviter captures infinies)
 DEFAULT_MIN_VOICE_CHUNKS = 10      # Au moins 10 chunks vocaux (~0.64s de voix réelle)
@@ -45,8 +45,8 @@ DEFAULT_MIN_VOICE_CHUNKS = 10      # Au moins 10 chunks vocaux (~0.64s de voix r
 # ─── Seuil adaptatif ─────────────────────────────────────
 ADAPTIVE_MULTIPLIER = float(os.environ.get("EXO_VAD_MULTIPLIER", "3.0"))
 NOISE_FLOOR_SAMPLES = 30           # Nb chunks pour calibrer le bruit ambiant
-SILENCE_WINDOW_SIZE = 25           # ~1.6s fenêtre glissante pour fin de parole
-SILENCE_END_RATIO = 0.25           # < 25% voix dans la fenêtre → parole terminée
+SILENCE_WINDOW_SIZE = 15           # ~1.0s fenêtre glissante pour fin de parole (réduit de 25)
+SILENCE_END_RATIO = 0.20           # < 20% voix dans la fenêtre → parole terminée (réduit de 0.25)
 
 # ─── Hallucinations Whisper connues (filtrées) ───────────
 WHISPER_HALLUCINATIONS = [

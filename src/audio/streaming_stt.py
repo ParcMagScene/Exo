@@ -38,8 +38,8 @@ from src.audio.wake_word import (
 logger = logging.getLogger(__name__)
 
 # ─── Configuration streaming ─────────────────────────────
-TRANSCRIBE_INTERVAL_SEC = 1.0   # Intervalle min entre soumissions Whisper
-REUSE_VOICE_THRESHOLD = 6       # Si < N chunks vocaux dans le tail → réutiliser (≈0.4s)
+TRANSCRIBE_INTERVAL_SEC = 0.5   # Intervalle min entre soumissions Whisper (réduit pour int8 rapide)
+REUSE_VOICE_THRESHOLD = 15      # Si < N chunks vocaux dans le tail → réutiliser résultat streaming
 
 
 def _transcribe_buffer(whisper_model, audio_bytes: bytes) -> str:

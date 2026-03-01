@@ -326,10 +326,23 @@ class BrainEngine:
         if len(self._conversation_history) > max_history * 2:  # Garder buffer
             self._conversation_history = self._conversation_history[-max_history:]
         
+        # Déterminer si des outils domotiques sont nécessaires
+        # (skip tools = prompt plus léger = réponse GPT ~2x plus rapide)
+        _ACTION_KW = (
+            "allume", "éteins", "éteindre", "lumière", "lampe", "lamp",
+            "tv", "télé", "volume", "musique", "joue", "play", "pause",
+            "caméra", "camera", "litière", "petkit",
+            "mémorise", "retiens", "souviens", "rappelle",
+            "heure", "météo", "temps qu'il", "température",
+        )
+        text_lower = text.lower()
+        needs_tools = any(kw in text_lower for kw in _ACTION_KW)
+        tools_to_send = self.tools if needs_tools else []
+
         # Appel à GPT-4o avec température basse pour réponses directes
         response = await self._call_gpt4o(
             messages=self._build_messages(system_prompt),
-            tools=self.tools,
+            tools=tools_to_send,
             temperature=0.5,
             max_tokens=80    # Ultra court : 2 phrases max pour réponse vocale
         )
@@ -437,7 +450,7 @@ class BrainEngine:
     def _build_messages(self, system_prompt: str) -> List[Dict[str, str]]:
         """Construit la liste des messages."""
         messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(self._conversation_history[-10:])  # Garder les 10 derniers messages
+        messages.extend(self._conversation_history[-6:])  # 6 derniers messages (moins de tokens)
         return messages
 
     async def _call_gpt4o(
@@ -461,15 +474,19 @@ class BrainEngine:
                 # Utiliser le bon nom de modèle selon le mode
                 model_name = self.model if self._use_openai_standard else self.deployment
                 
-                response = await self._client.chat.completions.create(
+                # Ne pas envoyer tools vide (erreur API + tokens gaspillés)
+                kwargs = dict(
                     model=model_name,
                     messages=messages,
-                    tools=tools,
-                    tool_choice="auto",
                     temperature=temperature,
                     max_tokens=max_tokens,
-                    timeout=30.0
+                    timeout=30.0,
                 )
+                if tools:
+                    kwargs["tools"] = tools
+                    kwargs["tool_choice"] = "auto"
+                
+                response = await self._client.chat.completions.create(**kwargs)
                 # Convertir en dict pour compatibilité _parse_response
                 return response.model_dump()
             except Exception as e:
@@ -498,9 +515,10 @@ class BrainEngine:
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
-                "tools": tools,
-                "tool_choice": "auto"
             }
+            if tools:
+                payload["tools"] = tools
+                payload["tool_choice"] = "auto"
             params = None
         else:
             url = f"{self.azure_endpoint.rstrip('/')}/openai/deployments/{self.deployment}/chat/completions"
@@ -512,9 +530,10 @@ class BrainEngine:
                 "messages": messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
-                "tools": tools,
-                "tool_choice": "auto"
             }
+            if tools:
+                payload["tools"] = tools
+                payload["tool_choice"] = "auto"
             params = {"api-version": self.api_version}
         
         try:
