@@ -185,7 +185,8 @@ async def streaming_capture_and_transcribe(
             if pending_future is not None and pending_future.done():
                 try:
                     result = pending_future.result()
-                    if result and not is_hallucination(result, duration):
+                    buf_duration = len(buffer) / (sample_rate * 2)
+                    if result and not is_hallucination(result, buf_duration):
                         last_transcript = result
                 except Exception:
                     pass

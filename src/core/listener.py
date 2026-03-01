@@ -31,7 +31,7 @@ DEFAULT_DEVICE_INDEX = None      # None = micro par défaut du système
 SAMPLE_RATE = 16000
 CHUNK_SIZE = 1024
 CHANNELS = 1
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")  # "base" = rapide sur CPU, bon FR
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "small")  # "small" = bon FR sur CPU
 FOLLOWUP_TIMEOUT_SEC = 7.0      # Attente après "Exo" seul (généreux)
 
 
