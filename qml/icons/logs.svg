@@ -1,0 +1,7 @@
+<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M4 4H16V14C16 14.55 15.55 15 15 15H5C4.45 15 4 14.55 4 14V4Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+  <line x1="4" y1="7" x2="16" y2="7" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+  <line x1="4" y1="10" x2="16" y2="10" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+  <line x1="4" y1="13" x2="16" y2="13" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+  <line x1="2" y1="17" x2="18" y2="17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,7 @@
+# EXO Assistant — toutes les dépendances Python
+# Pour installer uniquement les services légers : pip install -r requirements-base.txt
+# Pour installer les services ML/audio :          pip install -r requirements-ml.txt
+# Pour tout installer :                           pip install -r requirements.txt
+
+-r requirements-base.txt
+-r requirements-ml.txt

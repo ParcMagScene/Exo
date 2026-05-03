@@ -1,0 +1,9 @@
+# EXO Assistant — dépendances de base (services légers)
+# Utilisé par : exo_server, websearch_server, news_server, knowledge_server, tools_server
+
+aiohttp>=3.9,<4
+websockets>=12,<14
+
+# Testing
+pytest>=8
+pytest-asyncio>=0.23

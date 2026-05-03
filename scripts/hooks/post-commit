@@ -1,0 +1,98 @@
+#!/bin/sh
+# ═══════════════════════════════════════════════════════════════
+#  EXO — Git post-commit hook
+#  Après chaque commit :
+#    1. Exécution de auto_maintain.py (docs + context)
+#    2. Mise à jour de docs/last_update.md
+#    3. Mise à jour du CHANGELOG.md
+# ═══════════════════════════════════════════════════════════════
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PYTHON=""
+
+for p in "$REPO_ROOT/.venv/Scripts/python.exe" \
+         "$REPO_ROOT/.venv/bin/python" \
+         "python3" "python"; do
+    if command -v "$p" >/dev/null 2>&1 || [ -x "$p" ]; then
+        PYTHON="$p"
+        break
+    fi
+done
+
+if [ -z "$PYTHON" ]; then
+    exit 0
+fi
+
+echo "══════════════════════════════════════════════"
+echo "  EXO post-commit hook"
+echo "══════════════════════════════════════════════"
+
+# ── 1. Régénérer documentation + context ──
+if [ -f "$REPO_ROOT/scripts/auto_maintain.py" ]; then
+    echo "[post-commit] Mise à jour documentation..."
+    "$PYTHON" "$REPO_ROOT/scripts/auto_maintain.py" docs 2>/dev/null || true
+    echo "[post-commit] Mise à jour context.md..."
+    "$PYTHON" "$REPO_ROOT/scripts/auto_maintain.py" context 2>/dev/null || true
+fi
+
+# ── 2. Mise à jour docs/last_update.md ──
+COMMIT_HASH=$(git rev-parse --short HEAD)
+COMMIT_MSG=$(git log -1 --pretty=%s)
+COMMIT_DATE=$(git log -1 --pretty=%ci)
+COMMIT_AUTHOR=$(git log -1 --pretty=%an)
+
+LAST_UPDATE="$REPO_ROOT/docs/last_update.md"
+cat > "$LAST_UPDATE" << EOF
+# Dernière mise à jour
+
+> Auto-généré par le hook post-commit
+
+| Champ | Valeur |
+|-------|--------|
+| **Commit** | \`$COMMIT_HASH\` |
+| **Date** | $COMMIT_DATE |
+| **Auteur** | $COMMIT_AUTHOR |
+| **Message** | $COMMIT_MSG |
+
+## Fichiers modifiés
+
+\`\`\`
+$(git diff-tree --no-commit-id --name-status -r HEAD)
+\`\`\`
+EOF
+echo "[post-commit] ✓ docs/last_update.md mis à jour"
+
+# ── 3. Mise à jour CHANGELOG.md (append) ──
+CHANGELOG="$REPO_ROOT/CHANGELOG.md"
+ENTRY="- **$COMMIT_DATE** [\`$COMMIT_HASH\`] $COMMIT_MSG"
+
+if [ ! -f "$CHANGELOG" ]; then
+    cat > "$CHANGELOG" << EOF
+# Changelog EXO
+
+> Auto-généré par le hook post-commit. Entrées les plus récentes en haut.
+
+## Historique
+
+$ENTRY
+EOF
+    echo "[post-commit] ✓ CHANGELOG.md créé"
+else
+    # Insérer après la ligne "## Historique"
+    if grep -q "## Historique" "$CHANGELOG"; then
+        # Utiliser Python pour l'insertion (sed ne fonctionne pas pareil partout)
+        "$PYTHON" -c "
+import pathlib
+p = pathlib.Path('$CHANGELOG')
+text = p.read_text(encoding='utf-8')
+marker = '## Historique\n'
+if marker in text:
+    text = text.replace(marker, marker + '\n$ENTRY\n', 1)
+    p.write_text(text, encoding='utf-8')
+" 2>/dev/null || true
+        echo "[post-commit] ✓ CHANGELOG.md mis à jour"
+    fi
+fi
+
+echo "[post-commit] ✓ Post-commit terminé"
+exit 0

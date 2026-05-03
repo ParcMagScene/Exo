@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <!-- EXO App Icon — Diamant hexagonal stylisé -->
+  <defs>
+    <linearGradient id="exoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0078D4"/>
+      <stop offset="100%" stop-color="#E94560"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#1A1A2E"/>
+  <!-- Hexagonal diamond -->
+  <polygon points="64,12 108,38 108,90 64,116 20,90 20,38"
+           fill="none" stroke="url(#exoGrad)" stroke-width="3"
+           filter="url(#glow)"/>
+  <!-- Inner diamond accent -->
+  <polygon points="64,28 96,46 96,82 64,100 32,82 32,46"
+           fill="none" stroke="#0078D4" stroke-width="1.5" opacity="0.5"/>
+  <!-- EXO text -->
+  <text x="64" y="72" text-anchor="middle"
+        font-family="Cascadia Code, Consolas, monospace"
+        font-size="28" font-weight="bold" fill="#E0E0E0"
+        letter-spacing="4">EXO</text>
+</svg>

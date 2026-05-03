@@ -1,0 +1,121 @@
+# Build directories
+build/
+debug/
+release/
+*.exe
+*.dll
+*.pdb
+
+# Qt generated files
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.moc
+*.o
+*.obj
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.sln
+
+# Configuration files with API keys
+config/assistant.conf
+config/*.conf
+!config/*.conf.example
+!config/*.conf.template
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Python virtual environment
+.venv/
+.venv_stt_tts/
+__pycache__/
+*.pyc
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# Node.js (if needed)
+node_modules/
+npm-debug.log*
+
+# GUI build output
+gui/dist/
+
+# Logs
+logs/
+
+# Models directory (local weights)
+models/
+
+# Documentation temporaire (utiliser EXO_DOCUMENTATION.md unifié)
+*_GUIDE.md
+*_REPORT.md
+TEST_*.md
+
+# External dependencies (built locally)
+whisper.cpp/
+rtaudio/
+
+# Auto-generated context
+.exo_context/
+context.md
+
+# Generated documentation site
+docs_site/
+
+# Temporary script outputs
+scripts/_audit_result.json
+scripts/_benchmark*.wav
+__test_mem_dir__/
+
+# Orpheus venv & artefacts
+services/*/venv/
+services/orpheus/*.wav
+orpheus_*.wav
+orpheus_stream_capture.wav
+*.wav
+# Captures / debug
+crash_*.txt
+build_log.txt
+startTime.txt
+endTime.txt
+__tts_log_offsets.txt
+initialLines.txt
+run_capture_start_line.txt
+spk_list.txt
+tts_bench*.txt
+tts_server_streaming.log
+# exo egg
+exo.egg-info/
+exo/
+Testing/

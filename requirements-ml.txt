@@ -1,0 +1,32 @@
+# EXO Assistant — dépendances ML / audio (services lourds)
+# Utilisé par : stt_server, tts_server, vad_server, wakeword_server, memory_server, nlu_server
+# Prérequis : pip install -r requirements-base.txt
+
+# STT (stt_server.py)
+faster-whisper>=1.0
+
+# TTS (tts_server.py) — CosyVoice 2
+# Install CosyVoice: pip install -e . from cloned https://github.com/FunAudioLLM/CosyVoice
+hyperpyyaml>=1.2
+conformer
+modelscope
+# PyTorch CUDA — install via: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+torch>=2.4,<2.5
+torchaudio>=2.4,<2.5
+soundfile
+transformers>=4.40,<4.55
+numpy>=1.24
+
+# VAD (vad_server.py) — Silero VAD
+silero-vad>=5.1
+onnxruntime>=1.17
+
+# DSP (noise reduction in stt_server.py)
+noisereduce>=3.0
+
+# Wake Word (wakeword_server.py) — OpenWakeWord
+openwakeword>=0.6
+
+# Semantic Memory (memory_server.py) — FAISS + Embeddings
+faiss-cpu>=1.7
+sentence-transformers>=2.2

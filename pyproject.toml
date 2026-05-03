@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "exo"
+version = "30.0.0"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+where = [".", "python"]
+exclude = ["tests*", "build*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = [
+    "python",
+    "python/orchestrator",
+    "python/nlu",
+    "python/planner",
+    "python/executor",
+    "python/verifier",
+    "python/context",
+    "python/memory",
+    "python/stt",
+    "python/tts",
+    "python/tools",
+    "python/news",
+    "python/knowledge",
+    "python/websearch",
+    "python/vad",
+    "python/wakeword",
+    "python/domotique",
+    "python/network",
+]
+testpaths = ["tests/python", "tests/integration", "tests/performance", "exo/tests"]
+markers = [
+    "integration: tests nécessitant les serveurs en cours d'exécution",
+    "performance: benchmarks de latence et débit",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["python", "tests", "exo"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["exo"]

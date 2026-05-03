@@ -1,0 +1,102 @@
+#!/bin/sh
+# ═══════════════════════════════════════════════════════════════
+#  EXO — Git pre-commit hook
+#  Vérifie le code AVANT chaque commit :
+#    1. Nettoyage fichiers temporaires
+#    2. Vérification conventions de nommage
+#    3. Vérification imports/includes
+#    4. Formatage (si outils disponibles)
+# ═══════════════════════════════════════════════════════════════
+set -e
+
+# Trouver la racine du dépôt
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PYTHON=""
+
+# Chercher Python dans l'ordre de préférence
+for p in "$REPO_ROOT/.venv/Scripts/python.exe" \
+         "$REPO_ROOT/.venv/bin/python" \
+         "python3" "python"; do
+    if command -v "$p" >/dev/null 2>&1 || [ -x "$p" ]; then
+        PYTHON="$p"
+        break
+    fi
+done
+
+if [ -z "$PYTHON" ]; then
+    echo "[pre-commit] WARN: Python non trouvé — hook ignoré"
+    exit 0
+fi
+
+echo "══════════════════════════════════════════════"
+echo "  EXO pre-commit hook"
+echo "══════════════════════════════════════════════"
+
+# ── 1. Nettoyage fichiers temporaires staged ──
+echo "[pre-commit] Nettoyage fichiers temporaires..."
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+BLOCKED=""
+for f in $STAGED; do
+    case "$f" in
+        *__pycache__*|*.pyc|*.pyo|*.tmp|*.bak)
+            BLOCKED="$BLOCKED $f"
+            ;;
+    esac
+done
+if [ -n "$BLOCKED" ]; then
+    echo "[pre-commit] ERREUR: Fichiers temporaires staged:"
+    for f in $BLOCKED; do
+        echo "  - $f"
+        git reset HEAD -- "$f" 2>/dev/null || true
+    done
+    echo "[pre-commit] Fichiers retirés du staging. Recommitez."
+    exit 1
+fi
+
+# ── 2. Vérification conventions (via auto_maintain.py check) ──
+echo "[pre-commit] Vérification conventions..."
+if [ -f "$REPO_ROOT/scripts/auto_maintain.py" ]; then
+    CHECK_OUTPUT=$("$PYTHON" "$REPO_ROOT/scripts/auto_maintain.py" check 2>&1) || true
+    # Extraire les warnings
+    WARNINGS=$(echo "$CHECK_OUTPUT" | grep -c "⚠" 2>/dev/null || echo "0")
+    if [ "$WARNINGS" -gt "0" ]; then
+        echo "$CHECK_OUTPUT" | grep "⚠"
+        echo "[pre-commit] WARN: $WARNINGS avertissement(s) de convention"
+        echo "[pre-commit] Le commit continue malgré les warnings."
+    else
+        echo "[pre-commit] ✓ Conventions OK"
+    fi
+fi
+
+# ── 3. Formatage Python (black, si disponible) ──
+PY_STAGED=$(echo "$STAGED" | grep '\.py$' || true)
+if [ -n "$PY_STAGED" ]; then
+    if command -v black >/dev/null 2>&1 || "$PYTHON" -m black --version >/dev/null 2>&1; then
+        echo "[pre-commit] Formatage Python (black)..."
+        for f in $PY_STAGED; do
+            if [ -f "$REPO_ROOT/$f" ]; then
+                "$PYTHON" -m black --quiet --line-length 120 "$REPO_ROOT/$f" 2>/dev/null || true
+                git add "$REPO_ROOT/$f"
+            fi
+        done
+        echo "[pre-commit] ✓ Python formaté"
+    fi
+fi
+
+# ── 4. Formatage C++ (clang-format, si disponible) ──
+CPP_STAGED=$(echo "$STAGED" | grep -E '\.(cpp|h)$' || true)
+if [ -n "$CPP_STAGED" ]; then
+    if command -v clang-format >/dev/null 2>&1; then
+        echo "[pre-commit] Formatage C++ (clang-format)..."
+        for f in $CPP_STAGED; do
+            if [ -f "$REPO_ROOT/$f" ]; then
+                clang-format -i "$REPO_ROOT/$f" 2>/dev/null || true
+                git add "$REPO_ROOT/$f"
+            fi
+        done
+        echo "[pre-commit] ✓ C++ formaté"
+    fi
+fi
+
+echo "[pre-commit] ✓ Pré-vérifications terminées"
+exit 0

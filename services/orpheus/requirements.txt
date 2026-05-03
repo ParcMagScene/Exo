@@ -1,0 +1,24 @@
+# Orpheus 3B FR TTS server (CUDA, Windows)
+# Installer torch CUDA SEPAREMENT (cf. instructions dans start_orpheus.ps1)
+# Versions epinglees pour reproductibilite (mai 2026).
+
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+numpy==1.26.4
+soundfile==0.12.1
+
+transformers==4.45.2
+accelerate==0.34.2
+huggingface_hub==0.25.2
+safetensors==0.4.5
+sentencepiece==0.2.0
+protobuf==4.25.5
+
+# Codec audio SNAC 24 kHz (Orpheus depend de SNAC pour decoder les tokens)
+snac==1.2.1
+einops==0.8.0
+
+# Inference GGUF (CUDA 12.4) - installer via :
+#   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+llama-cpp-python>=0.3.22

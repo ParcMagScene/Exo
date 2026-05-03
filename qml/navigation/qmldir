@@ -1,0 +1,2 @@
+module navigation
+singleton MenuStructure 1.0 MenuStructure.qml

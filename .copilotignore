@@ -1,0 +1,8 @@
+build/
+logs/
+models/
+whisper.cpp/models/
+.venv*/
+node_modules/
+dist/
+out/

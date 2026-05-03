@@ -1,0 +1,14 @@
+HomePage 1.0 HomePage.qml
+SettingsPage 1.0 SettingsPage.qml
+PipelinePage 1.0 PipelinePage.qml
+HistoryPage 1.0 HistoryPage.qml
+FloorPlanPage 1.0 FloorPlanPage.qml
+MaisonPage 1.0 MaisonPage.qml
+ReseauPage 1.0 ReseauPage.qml
+ObservabilityPage 1.0 ObservabilityPage.qml
+PipelinePageExpert 1.0 PipelinePageExpert.qml
+VisionPageExpert 1.0 VisionPageExpert.qml
+SimulationPageExpert 1.0 SimulationPageExpert.qml
+SpatialCognitionPageExpert 1.0 SpatialCognitionPageExpert.qml
+SecurityPageExpert 1.0 SecurityPageExpert.qml
+DevelopmentPageExpert 1.0 DevelopmentPageExpert.qml

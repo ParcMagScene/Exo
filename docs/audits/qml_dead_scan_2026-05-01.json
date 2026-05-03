@@ -1,0 +1,845 @@
+{
+  "qml_count": 58,
+  "never_instantiated": [
+    "qml/components/CameraCone.qml",
+    "qml/components/ExoBadge.qml",
+    "qml/components/ExoConfirmDialog.qml",
+    "qml/components/ExoDialog.qml",
+    "qml/components/ExoMicButton.qml",
+    "qml/components/ExoNotification.qml",
+    "qml/components/ExoServiceStatus.qml",
+    "qml/components/ExoStatusPill.qml",
+    "qml/components/ExoWaveform.qml",
+    "qml/components/SpatialNetworkIntegration.qml"
+  ],
+  "import_candidates_unused": [
+    {
+      "file": "qml/components/CameraCone.qml",
+      "import": "import \"../theme\"",
+      "reason": "Theme non utilise"
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "import": "import QtQuick.Layouts",
+      "reason": "Aucun type Layout utilise"
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "import": "import \"../theme\"",
+      "reason": "Theme non utilise"
+    },
+    {
+      "file": "qml/pages/MaisonPage.qml",
+      "import": "import \"../components\"",
+      "reason": "Aucun composant local instancie"
+    },
+    {
+      "file": "qml/panels/SafeBootPanel.qml",
+      "import": "import \"../components\"",
+      "reason": "Aucun composant local instancie"
+    }
+  ],
+  "unused_ids": [
+    {
+      "file": "qml/components/AudioWaveformView.qml",
+      "id": "animTimer"
+    },
+    {
+      "file": "qml/components/CognitiveTimeline.qml",
+      "id": "snapTimer"
+    },
+    {
+      "file": "qml/components/ExoMicButton.qml",
+      "id": "btn"
+    },
+    {
+      "file": "qml/components/ExoPipelineStatus.qml",
+      "id": "dot"
+    },
+    {
+      "file": "qml/components/ExoSplashScreen.qml",
+      "id": "spinner"
+    },
+    {
+      "file": "qml/components/FloorPlanTools.qml",
+      "id": "toolBar"
+    },
+    {
+      "file": "qml/components/FurniturePalette.qml",
+      "id": "itemsGrid"
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "id": "pollTimer"
+    },
+    {
+      "file": "qml/core/PageRouter.qml",
+      "id": "router"
+    },
+    {
+      "file": "qml/core/UIState.qml",
+      "id": "uiState"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "id": "micErrorBanner"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "id": "settingsPage"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "id": "historyPage"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "id": "pipelinePage"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "id": "floorPlanPage"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "id": "keyboardFallback"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "id": "startupFallbackOverlay"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "id": "startupBlankWatchdog"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "id": "startupSplashWatchdog"
+    },
+    {
+      "file": "qml/navigation/MenuStructure.qml",
+      "id": "menuStructure"
+    },
+    {
+      "file": "qml/pages/FloorPlanPage.qml",
+      "id": "toolBar"
+    },
+    {
+      "file": "qml/pages/FloorPlanPage.qml",
+      "id": "interactionArea"
+    },
+    {
+      "file": "qml/pages/FloorPlanPage.qml",
+      "id": "propertyPanel"
+    },
+    {
+      "file": "qml/pages/HistoryPage.qml",
+      "id": "root"
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "id": "sectionTabs"
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "id": "cognitiveTimelineLoader"
+    },
+    {
+      "file": "qml/pages/ObservabilityPage.qml",
+      "id": "root"
+    },
+    {
+      "file": "qml/pages/PipelinePage.qml",
+      "id": "refreshTimer"
+    },
+    {
+      "file": "qml/pages/PipelinePage.qml",
+      "id": "nodeRect"
+    },
+    {
+      "file": "qml/pages/PipelinePage.qml",
+      "id": "inspectorLogRefresh"
+    },
+    {
+      "file": "qml/pages/PipelinePageExpert.qml",
+      "id": "pulseAnim"
+    },
+    {
+      "file": "qml/pages/PipelinePageExpert.qml",
+      "id": "barAnim"
+    },
+    {
+      "file": "qml/pages/ReseauPage.qml",
+      "id": "typeFilter"
+    },
+    {
+      "file": "qml/pages/SecurityPageExpert.qml",
+      "id": "root"
+    },
+    {
+      "file": "qml/pages/SettingsPage.qml",
+      "id": "pitchValueText"
+    },
+    {
+      "file": "qml/pages/SettingsPage.qml",
+      "id": "rateValueText"
+    },
+    {
+      "file": "qml/pages/SettingsPage.qml",
+      "id": "semanticToggle"
+    },
+    {
+      "file": "qml/pages/SettingsPage.qml",
+      "id": "neuralWakewordToggle"
+    },
+    {
+      "file": "qml/pages/SimulationPageExpert.qml",
+      "id": "root"
+    },
+    {
+      "file": "qml/pages/SpatialCognitionPageExpert.qml",
+      "id": "root"
+    },
+    {
+      "file": "qml/pages/VisionPageExpert.qml",
+      "id": "root"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "id": "theme"
+    }
+  ],
+  "unused_properties": [
+    {
+      "file": "qml/components/AudioWaveformView.qml",
+      "property": "glowAmount"
+    },
+    {
+      "file": "qml/components/ExoDialog.qml",
+      "property": "contentItem"
+    },
+    {
+      "file": "qml/components/ExoPanelHeader.qml",
+      "property": "rightContent"
+    },
+    {
+      "file": "qml/components/ExoSplashScreen.qml",
+      "property": "criticalReady"
+    },
+    {
+      "file": "qml/components/ExoSplashScreen.qml",
+      "property": "criticalReadyCount"
+    },
+    {
+      "file": "qml/components/ExoSplashScreen.qml",
+      "property": "criticalTotal"
+    },
+    {
+      "file": "qml/components/ExoSplashScreen.qml",
+      "property": "lazyReadyCount"
+    },
+    {
+      "file": "qml/components/ExoSplashScreen.qml",
+      "property": "lazyTotal"
+    },
+    {
+      "file": "qml/components/ExoSplashScreen.qml",
+      "property": "failedServices"
+    },
+    {
+      "file": "qml/components/FloorPlanProperties.qml",
+      "property": "index"
+    },
+    {
+      "file": "qml/components/FloorPlanTools.qml",
+      "property": "index"
+    },
+    {
+      "file": "qml/components/MemoryInspector.qml",
+      "property": "longTermMemory"
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "property": "allConnected"
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "property": "deviceCount"
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "property": "entityCount"
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "property": "cameraCount"
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "property": "onlineDeviceCount"
+    },
+    {
+      "file": "qml/core/PageRouter.qml",
+      "property": "indexToComponent"
+    },
+    {
+      "file": "qml/core/PageRouter.qml",
+      "property": "normalPages"
+    },
+    {
+      "file": "qml/core/PageRouter.qml",
+      "property": "expertPages"
+    },
+    {
+      "file": "qml/MainWindow.qml",
+      "property": "appIcon"
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "property": "transcriptView"
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "property": "responseView"
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "property": "planProgress"
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "property": "contextPanel"
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "property": "maisonPanel"
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "property": "reseauPanel"
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "property": "floorPlanPanel"
+    },
+    {
+      "file": "qml/pages/PipelinePage.qml",
+      "property": "recentEvents"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "isDark"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "bgHover"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "bgActive"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "bgInput"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "accentDark"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "accentHover"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "accentActive"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "textAccent"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "textLink"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "borderLight"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "borderFocus"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "borderHover"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "splashBg"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "splashAccent"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "splashPanel"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontFamily"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontMono"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontH2"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontBody"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontLabel"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontMicro"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontTiny"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontXL"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontMD"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontSM"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "fontXS"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "weightLight"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "weightRegular"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "weightMedium"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "weightSemiBold"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "weightBold"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing2"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing4"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing6"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing8"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing10"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing12"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing16"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing20"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing24"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "spacing32"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "marginH"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "marginV"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "paddingBtn"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "paddingCard"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "paddingSection"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "radiusSmall"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "radiusMedium"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "radiusRound"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "radius8"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "radius12"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "shadowSmallRadius"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "shadowSmallOpacity"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "shadowMediumRadius"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "shadowMediumOpacity"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "shadowLargeRadius"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "shadowLargeOpacity"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "animFast"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "animNormal"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "animSlow"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "animPage"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "sidebarWidth"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "headerHeight"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "bottomBarHeight"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "inputHeight"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "buttonHeight"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "navItemHeight"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "iconSize"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "iconSizeLarge"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "badgeSize"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "dotSize"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "progressHeight"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "tabHeight"
+    },
+    {
+      "file": "qml/theme/Theme.qml",
+      "property": "sheetWidth"
+    }
+  ],
+  "signals": [
+    {
+      "file": "qml/components/ExoButton.qml",
+      "signal": "clicked",
+      "emits_in_file": 1,
+      "handlers_anywhere": 76
+    },
+    {
+      "file": "qml/components/ExoConfirmDialog.qml",
+      "signal": "accepted",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/ExoConfirmDialog.qml",
+      "signal": "rejected",
+      "emits_in_file": 1,
+      "handlers_anywhere": 0
+    },
+    {
+      "file": "qml/components/ExoDialog.qml",
+      "signal": "accepted",
+      "emits_in_file": 0,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/ExoDialog.qml",
+      "signal": "rejected",
+      "emits_in_file": 0,
+      "handlers_anywhere": 0
+    },
+    {
+      "file": "qml/components/ExoDialog.qml",
+      "signal": "closed",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/ExoMicButton.qml",
+      "signal": "clicked",
+      "emits_in_file": 1,
+      "handlers_anywhere": 76
+    },
+    {
+      "file": "qml/components/ExoNotification.qml",
+      "signal": "dismissed",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/ExoSplashScreen.qml",
+      "signal": "dismissed",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/FloorPlanTools.qml",
+      "signal": "zoomIn",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/FloorPlanTools.qml",
+      "signal": "zoomOut",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/FloorPlanTools.qml",
+      "signal": "centerView",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/FloorPlanTools.qml",
+      "signal": "furnitureRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/FloorPlanTools.qml",
+      "signal": "clicked",
+      "emits_in_file": 1,
+      "handlers_anywhere": 76
+    },
+    {
+      "file": "qml/components/FurniturePalette.qml",
+      "signal": "closed",
+      "emits_in_file": 2,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/ModeSwitch.qml",
+      "signal": "modeChanged",
+      "emits_in_file": 2,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "signal": "deviceUpdated",
+      "emits_in_file": 1,
+      "handlers_anywhere": 0
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "signal": "sensorUpdated",
+      "emits_in_file": 1,
+      "handlers_anywhere": 0
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "signal": "cameraUpdated",
+      "emits_in_file": 1,
+      "handlers_anywhere": 0
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "signal": "networkUpdated",
+      "emits_in_file": 3,
+      "handlers_anywhere": 0
+    },
+    {
+      "file": "qml/components/SpatialNetworkIntegration.qml",
+      "signal": "entityStateChanged",
+      "emits_in_file": 1,
+      "handlers_anywhere": 0
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "signal": "deviceCommand",
+      "emits_in_file": 1,
+      "handlers_anywhere": 2
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "signal": "homeRefreshRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "signal": "scenarioRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 2
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "signal": "networkScanRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/pages/HomePage.qml",
+      "signal": "networkScanFastRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/pages/MaisonPage.qml",
+      "signal": "deviceCommand",
+      "emits_in_file": 1,
+      "handlers_anywhere": 2
+    },
+    {
+      "file": "qml/pages/MaisonPage.qml",
+      "signal": "refreshRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/pages/MaisonPage.qml",
+      "signal": "scenarioRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 2
+    },
+    {
+      "file": "qml/pages/ReseauPage.qml",
+      "signal": "scanRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/pages/ReseauPage.qml",
+      "signal": "scanFastRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/pages/ReseauPage.qml",
+      "signal": "nodeClicked",
+      "emits_in_file": 2,
+      "handlers_anywhere": 0
+    },
+    {
+      "file": "qml/pages/SettingsPage.qml",
+      "signal": "clicked",
+      "emits_in_file": 3,
+      "handlers_anywhere": 76
+    },
+    {
+      "file": "qml/panels/SafeBootPanel.qml",
+      "signal": "retryRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/panels/SafeBootPanel.qml",
+      "signal": "restartRequested",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    },
+    {
+      "file": "qml/panels/Sidebar.qml",
+      "signal": "panelSelected",
+      "emits_in_file": 1,
+      "handlers_anywhere": 1
+    }
+  ],
+  "unused_assets": []
+}
