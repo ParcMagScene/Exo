@@ -1,0 +1,33 @@
+[
+  {
+    "device_id": "dev_001",
+    "name": "Ampoule Hue Salon",
+    "manufacturer": "Philips",
+    "model": "LWB010",
+    "area_id": "area_salon",
+    "entities": [
+      "light.salon"
+    ],
+    "via_device_id": "dev_bridge"
+  },
+  {
+    "device_id": "dev_002",
+    "name": "Prise Garage",
+    "manufacturer": "Sonoff",
+    "model": "S20",
+    "area_id": "area_garage",
+    "entities": [
+      "switch.garage"
+    ],
+    "via_device_id": null
+  },
+  {
+    "device_id": "dev_bridge",
+    "name": "Hue Bridge",
+    "manufacturer": "Philips",
+    "model": "BSB002",
+    "area_id": null,
+    "entities": [],
+    "via_device_id": null
+  }
+]

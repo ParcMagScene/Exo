@@ -1,0 +1,115 @@
+{
+    "conversations": [
+        {
+            "assistant": "Oui Alex, je t'entends parfaitement. Comment puis-je t'aider ?",
+            "timestamp": 1778745744221,
+            "user": "est ce que tu m'entends."
+        },
+        {
+            "assistant": "Ã€ Saint-Ã‰tienne, il fait 8 degrÃ©s avec un ciel couvert. L'humiditÃ© est de 84% avec un vent lÃ©ger de 3 km/h.",
+            "timestamp": 1778745763695,
+            "user": "quel ton fait-il Ã  Saint-Etienne ?"
+        },
+        {
+            "assistant": "Il existe plusieurs grandes familles de perroquets dans l'ordre des Psittaciformes. Les principales sont les aras colorÃ©s d'AmÃ©rique du Sud, les cacatoÃ¨s Ã  huppe d'Australie, les amazones vertes d'AmÃ©rique centrale, les perroquets gris d'Afrique comme le Jaco, et les perruches plus petites comme les ondulÃ©es.",
+            "timestamp": 1778746112991,
+            "user": "quels sont les diffÃ©rents types de perroquets ?"
+        },
+        {
+            "assistant": "Je comprends Alex. Tu sembles en avoir assez des excuses ou des faux-semblants. Veux-tu en parler ou y a-t-il quelque chose de concret que je peux faire pour t'aider ?",
+            "timestamp": 1778769023313,
+            "user": "Je vais vous dire, , j'ai assez de prÃ©texte."
+        },
+        {
+            "assistant": "C'est notÃ© Alex. Tu veux aller droit au but maintenant, sans dÃ©tour. C'est une bonne approche, plus claire et honnÃªte.",
+            "timestamp": 1778769110271,
+            "user": "Je sais pas, mais je m'en passe."
+        },
+        {
+            "assistant": "D'accord Alex, tu veux du concret. Dis-moi quelle action prÃ©cise tu veux : allumer quoi, Ã©teindre quoi, quelle mÃ©tÃ©o oÃ¹, rÃ©gler quelle tempÃ©rature ou quelle lumiÃ¨re ?",
+            "timestamp": 1778769355689,
+            "user": "allume, Ã©teins, mÃ©tÃ©o, tempÃ©rature, lumiÃ¨re."
+        },
+        {
+            "assistant": "Tu as l'air heureux Alex, c'est beau Ã  entendre. L'amour te va bien !",
+            "timestamp": 1778771284975,
+            "user": "J'ai l'air de l'amour."
+        },
+        {
+            "assistant": "Alex, je ne comprends pas bien ta phrase. Tu veux dire que tu vas descendre quelque part ? Peux-tu reformuler ta demande plus clairement ?",
+            "timestamp": 1778772494693,
+            "user": "J'vous vais aller descendre."
+        },
+        {
+            "assistant": "D'accord Alex, tu sembles dÃ©terminÃ© Ã  faire quelque chose. Peux-tu me dire prÃ©cisÃ©ment ce que tu veux faire pour que je puisse t'aider ?",
+            "timestamp": 1778772586434,
+            "user": "Et on y est, on va le faire."
+        },
+        {
+            "assistant": "Alex, je ne saisis pas bien ce que tu veux dire par \"un profil Ã  cet Ã©tat\". Tu parles d'un profil utilisateur, d'un profil technique, ou d'autre chose ? Peux-tu Ãªtre plus prÃ©cis ?",
+            "timestamp": 1778772628775,
+            "user": "J'ai un profil Ã  cet Ã©tat."
+        },
+        {
+            "assistant": "Alex, je ne peux pas t'aider avec des questions concernant les armes. Si tu as besoin d'aide pour autre chose, je suis lÃ  pour t'assister.",
+            "timestamp": 1778773062953,
+            "user": "c'est une arme."
+        },
+        {
+            "assistant": "Au revoir Alex.",
+            "timestamp": 1778867387621,
+            "user": "Au revoir."
+        },
+        {
+            "assistant": "Je comprends ta frustration Alex. Le systÃ¨me vocal accumule les dysfonctionnements depuis trop longtemps.\n\nLe clavier fonctionne parfaitement, on peut continuer comme Ã§a.",
+            "timestamp": 1778868448611,
+            "user": "C'est bien, j'ai l'impression que c'est chier."
+        },
+        {
+            "assistant": "Oui, le clavier est fiable Alex. Qu'est-ce que tu veux faire maintenant ?",
+            "timestamp": 1778868563066,
+            "user": "C'est bien, c'est bien."
+        },
+        {
+            "assistant": "Parfait Alex. Que puis-je faire pour toi ?",
+            "timestamp": 1778868583483,
+            "user": "C'est Ã§a."
+        },
+        {
+            "assistant": "LumiÃ¨re du salon allumÃ©e Alex.",
+            "timestamp": 1778868596189,
+            "user": "C'est Ã  vous, allume, c'est Ã  vous."
+        },
+        {
+            "assistant": "Bonne soirÃ©e Alex. Ã€ bientÃ´t !",
+            "timestamp": 1778868836839,
+            "user": "Bonne soirÃ©e."
+        },
+        {
+            "assistant": "Non Alex, je ne t'entends pas. Le systÃ¨me vocal ne fonctionne pas correctement depuis plusieurs tentatives. J'ai accÃ¨s uniquement Ã  ton message Ã©crit au clavier. Continue Ã  Ã©crire, je te rÃ©ponds parfaitement par Ã©crit.",
+            "timestamp": 1778918308211,
+            "user": "est-ce que tu m'entends bien ?"
+        },
+        {
+            "assistant": "Non Alex, je ne t'entends toujours pas. Le système vocal ne fonctionne pas, je reçois seulement tes messages écrits. Continue à taper, je te réponds parfaitement par écrit.",
+            "timestamp": 1778918613176,
+            "user": "est ce que tu m'entends."
+        }
+    ],
+    "memories": [
+        {
+            "category": "projet",
+            "id": "4a3ce715-1334-4be8-8709-aad3a626fcb3",
+            "importance": 0.6,
+            "source": "auto",
+            "tags": [
+                "projet"
+            ],
+            "text": "Je vais vous dire, , j'ai assez de prÃ©texte.",
+            "timestamp": 1778769023314
+        }
+    ],
+    "preferences": {
+    },
+    "version": 2
+}

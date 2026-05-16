@@ -780,6 +780,23 @@ void TTSManager::prepareNext()
 {
     if (m_speaking) return;  // don't interfere with active speech
 
+    // 2026-05-04 FIX OVERLAP : ne JAMAIS prechauffer si le ring contient
+    // encore de l'audio non joue. prepareNext fait m_ringBuffer.clear()
+    // ce qui couperait la fin de la phrase precedente -> glitch audible.
+    // Garde-fou robuste : si quoi que ce soit reste a jouer, on attend.
+    if (m_ringBuffer.availableRead() > 0) {
+        hVoice() << "[Latency] prepareNext: ring contient encore"
+                 << m_ringBuffer.availableRead() << "bytes -- preheat differe (anti-overlap)";
+        return;
+    }
+    // 2026-05-04 FIX OVERLAP : ne pas prechauffer pendant qu'une synthese
+    // est en cours de production (worker en streaming). Sinon clear()
+    // jetterait les chunks staged.
+    if (m_synthesizing) {
+        hVoice() << "[Latency] prepareNext: synthese en cours -- preheat differe";
+        return;
+    }
+
     m_dsp.preAllocate(4096);
     m_ringBuffer.clear();
     ensureSinkReady();
@@ -1023,6 +1040,36 @@ void TTSManager::processQueue()
     ensureSinkReady();
     if (m_pumpTimer && !m_pumpTimer->isActive())
         m_pumpTimer->start();
+
+    // 2026-05-04 FIX UNDERFLOW : prebuffer inter-phrases.
+    // Mesures terrain : ring residuel ~310 ms a la jonction vs Orpheus
+    // first-chunk ~350-360 ms => deficit 40-50 ms => underflow systematique.
+    // Au chainage d'une phrase suivante, on injecte un coussin de silence
+    // dans le ring pour couvrir la latence du premier chunk Orpheus.
+    // 150 ms de pad => marge totale ~460 ms vs 360 ms requis (>100 ms safety).
+    // Inaudible a la jonction (deja un naturel ~30 ms entre phrases).
+    if (m_useRtAudioSink && m_rtSink && m_rtSink->isRunning()) {
+        const int bps = std::max(1, outputBytesPerSecond());
+        const int padMs = qEnvironmentVariableIntValue("EXO_TTS_INTERPHRASE_PAD_MS");
+        const int effectiveMs = (padMs >= 0 && padMs <= 1000) ? padMs : 150;
+        if (effectiveMs > 0) {
+            const int padBytes = (bps * effectiveMs) / 1000;
+            // Aligne sur frame size (channels * 2 bytes)
+            const int frameBytes = std::max(2, m_deviceFormat.channelCount() * 2);
+            const int alignedBytes = padBytes - (padBytes % frameBytes);
+            if (alignedBytes > 0) {
+                const int ringAvail = m_ringBuffer.availableRead();
+                // Inject seulement si le ring est bas (sinon serait redondant)
+                const int safeFloorBytes = (bps * 400) / 1000;
+                if (ringAvail < safeFloorBytes) {
+                    const int written = m_ringBuffer.write(QByteArray(alignedBytes, 0).constData(), alignedBytes);
+                    hVoice() << "[Audio] inter-phrase pad" << written << "bytes ("
+                             << (written * 1000 / bps) << "ms) ring=" << ringAvail
+                             << "bytes -- absorbe latence Orpheus first-chunk";
+                }
+            }
+        }
+    }
 
     hVoice() << "processQueue — dispatching phrase, ringbuffer:" << m_ringBuffer.availableRead() << "bytes";
     emit _doRequest(req);

@@ -164,9 +164,14 @@ DEFAULT_PORT = 8766
 DEFAULT_MODEL = "small"          # v26.2: small = 460MB, ~1.2–1.6s latency (was medium ~3.5s)
 DEFAULT_LANGUAGE = "fr"
 DEFAULT_BEAM_SIZE = 1            # v25.1: beam=1 for real-time latency (was 3)
-DEFAULT_DEVICE = "vulkan"        # Force Vulkan GPU (RTX 3070)
-DEFAULT_COMPUTE_TYPE = "int8"    # int8 = fast CPU, float16 = CUDA
-DEFAULT_BACKEND = "whispercpp"   # "whispercpp" (Vulkan GPU) or "faster_whisper" (CPU) or "whispercpp_cpu"
+# 2026-05-04 FIX FREEZES : Vulkan STT cause des blocages systeme repetes
+# (lockups GPU + main thread). Bascule sur faster_whisper CPU int8 :
+# - stabilite maximale (pas de driver GPU pour le STT)
+# - latence ~600-900 ms sur small/Ryzen 5600 (acceptable, perceptible mais sans glitch)
+# - Vulkan reste disponible explicitement via EXO_STT_BACKEND=whispercpp si besoin
+DEFAULT_DEVICE = "cpu"           # 2026-05-04 : CPU stable (auparavant : vulkan)
+DEFAULT_COMPUTE_TYPE = "int8"    # int8 = fast CPU
+DEFAULT_BACKEND = "faster_whisper"  # 2026-05-04 : faster_whisper CPU (auparavant : whispercpp Vulkan)
 DEFAULT_THREADS = 6              # Optimised for RTX 3070 + Ryzen 5600
 SAMPLE_RATE = 16000
 NOISE_REDUCTION_STRENGTH = 0.3   # 0.0 = off, 1.0 = max (light: C++ AGC already normalises)

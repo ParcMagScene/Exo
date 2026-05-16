@@ -294,6 +294,21 @@
             "assistant": "Oui Alex, je t'entends cinq sur cinq.",
             "timestamp": 1778950997427,
             "user": "est-ce que tu m'entends ?"
+        },
+        {
+            "assistant": "Oui Alex, je te reçois parfaitement.",
+            "timestamp": 1778951922373,
+            "user": "est-ce que tu n'entends bien là ?"
+        },
+        {
+            "assistant": "Il était une fois un petit renard roux qui avait peur du noir. Chaque soir, il se cachait au fond de son terrier en attendant le matin.\n\nUne nuit, sa maman l'emmena dehors et lui montra le ciel. \"Regarde, lui dit-elle, le noir n'est jamais vraiment noir. Il est rempli d'étoiles.\"\n\nDepuis ce jour, le petit renard adore la nuit, car il sait qu'elle brille en silence, Alex.",
+            "timestamp": 1778951977247,
+            "user": "raconte-moi une petite histoire."
+        },
+        {
+            "assistant": "Il était une fois une vieille horloge oubliée dans un grenier. Plus personne ne remontait ses aiguilles, et pourtant, chaque nuit, elle sonnait minuit avec fierté.\n\nUn jour, un enfant la découvrit et lui demanda : \"Pourquoi continues-tu, si personne ne t'écoute ?\" L'horloge répondit : \"Parce que le temps existe, même quand on l'oublie.\"\n\nL'enfant la ramena chez lui, et depuis, elle bat au rythme des rires de la maison, Alex.",
+            "timestamp": 1778952862682,
+            "user": "raconte-moi une histoire."
         }
     ],
     "memories": [

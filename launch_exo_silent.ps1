@@ -438,7 +438,7 @@ function Start-EXO {
 
     Start-EXOService -Name 'STT'           -Python $pythonStt  `
         -Script 'python/stt/stt_server.py'           -Port 8766 `
-        -ExtraArgs @('--backend','whispercpp','--model','small','--beam-size','1','--language','fr','--device','vulkan') `
+        -ExtraArgs @('--backend','faster_whisper','--model','small','--beam-size','1','--language','fr','--device','cpu') `
         -HealthTimeoutSeconds 10
 
     Start-EXOService -Name 'Orchestrator'  -Python $pythonVenv `

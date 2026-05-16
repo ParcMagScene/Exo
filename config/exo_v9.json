@@ -40,7 +40,7 @@
   },
 
   "stt": {
-    "backend": "whispercpp",
+    "backend": "faster_whisper",
     "model": "small",
     "language": "fr",
     "beam_size": 1,
