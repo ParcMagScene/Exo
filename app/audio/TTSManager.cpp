@@ -1432,43 +1432,51 @@ QByteArray TTSManager::adaptForOutputFormat(const QByteArray &pcm)
 
     const double ratio = static_cast<double>(outRate) / static_cast<double>(inRate);
 
-    // ── Linear interpolation resample STREAMING ──
-    // Etat persistant entre chunks (m_resampleSrcPos, m_resampleLastSample) :
-    // - srcPos accumule sa fraction d'un chunk au suivant -> pas de drift et
-    //   pas de "reset" toutes les 40 ms.
-    // - lastSample fournit l'echantillon "i = -1" au debut d'un chunk pour
-    //   interpoler proprement entre la fin du chunk precedent et le debut du
-    //   chunk courant -> elimine le clic periodique a la frontiere.
-    // Sortie : nombre de frames produits tant que srcPos < inputFrames.
-    // Premier chunk : on amorce lastSample avec input[0] pour eviter un saut
-    // depuis 0 vers le premier sample.
-    if (!m_resampleHasHistory) {
-        m_resampleLastSample = input[0];
-        m_resampleSrcPos = 0.0;
-        m_resampleHasHistory = true;
-    }
+    // ── Linear interpolation resample STREAMING (audit fix 2026-05-17) ──
+    // Etat persistant entre chunks (m_resampleSrcPos, m_resampleLastSample).
+    //
+    // BUG HISTORIQUE : la boucle s'executait tant que srcPos < inputFrames,
+    // et lorsque i1 == inputFrames (out-of-bounds) le code retombait sur
+    // s1 = input[inputFrames-1] -> sortie = "hold last sample" plate sur les
+    // dernieres frames du chunk. Resultat : 1 echantillon de zero-order-hold
+    // a chaque frontiere de chunk WS (40 ms) = buzz periodique a ~25 Hz
+    // audible comme une "rugosite" continue dans la voix.
+    //
+    // CORRECTIF : la boucle ne produit que les frames qui n'ont PAS besoin
+    // de l'echantillon du chunk suivant (i1 strictement < inputFrames). Le
+    // report (m_resampleSrcPos) est stocke en coordonnees NEGATIVES relatif
+    // au prochain chunk, de sorte que le 1er tour de la prochaine invocation
+    // ait i0 == -1 et emprunte la branche m_resampleLastSample -> interpolation
+    // continue, ZERO discontinuite a la jonction.
+    //
+    // Premier chunk : pas d'historique -> srcPos = 0, i0 = 0, branche normale.
+    double srcPos = m_resampleHasHistory ? m_resampleSrcPos : 0.0;
 
     // Reserve approximative ; on retaillera apres.
     const int approxOut = std::max(1, static_cast<int>(std::ceil(
-        (static_cast<double>(inputFrames) - m_resampleSrcPos) * ratio)) + 2);
+        (static_cast<double>(inputFrames) - srcPos) * ratio)) + 2);
     QByteArray converted(approxOut * outChannels * static_cast<int>(sizeof(int16_t)),
                          Qt::Uninitialized);
     int16_t *output = reinterpret_cast<int16_t *>(converted.data());
 
     int outFrame = 0;
-    double srcPos = m_resampleSrcPos;
-    while (srcPos < static_cast<double>(inputFrames)) {
+    // Borne stricte : srcPos doit permettre i1 = floor(srcPos)+1 < inputFrames.
+    // Equivalent : srcPos < inputFrames - 1 (avec petit epsilon pour egalite
+    // exacte). Les frames au-dela sont DEFEREES au prochain chunk pour etre
+    // interpolees correctement contre son input[0].
+    const double loopEnd = static_cast<double>(inputFrames - 1);
+    while (srcPos < loopEnd + 1e-9) {
         const int i0 = static_cast<int>(std::floor(srcPos));
         const int i1 = i0 + 1;
         const double frac = srcPos - static_cast<double>(i0);
-        // i0 == -1 : premier sample d'un chunk dont la position fractionnaire
-        // pointe AVANT input[0]. On utilise le dernier sample du chunk precedent.
+        // i0 == -1 : 1er sample d'un chunk dont la position fractionnaire
+        // pointe AVANT input[0]. On interpole entre le dernier sample du
+        // chunk precedent (m_resampleLastSample) et input[0].
         const int s0 = (i0 < 0)
             ? static_cast<int>(m_resampleLastSample)
             : static_cast<int>(input[i0 * inChannels]);
-        const int s1 = (i1 < inputFrames)
-            ? static_cast<int>(input[i1 * inChannels])
-            : static_cast<int>(input[(inputFrames - 1) * inChannels]);
+        // i1 < inputFrames toujours vrai grace a la borne loopEnd.
+        const int s1 = static_cast<int>(input[i1 * inChannels]);
         const int interp = static_cast<int>(s0 + (s1 - s0) * frac);
         const int16_t sample = static_cast<int16_t>(std::clamp(interp, -32768, 32767));
         for (int c = 0; c < outChannels; ++c)
@@ -1478,9 +1486,13 @@ QByteArray TTSManager::adaptForOutputFormat(const QByteArray &pcm)
         if (outFrame >= approxOut) break; // garde-fou ; ne doit pas arriver
     }
 
-    // Maj etat : on retranche inputFrames pour repartir relatif au prochain chunk.
+    // Report : srcPos est dans [inputFrames-1, inputFrames-1+step). On le
+    // stocke en coordonnees du PROCHAIN chunk (soustrait inputFrames) -> il
+    // est dans [-1, -1+step) ⊂ [-1, 0). Au prochain appel, i0 = -1 et la
+    // branche m_resampleLastSample s'active -> interpolation continue.
     m_resampleSrcPos = srcPos - static_cast<double>(inputFrames);
     m_resampleLastSample = input[(inputFrames - 1) * inChannels];
+    m_resampleHasHistory = true;
 
     // Truncate au nombre exact de frames produits.
     converted.resize(outFrame * outChannels * static_cast<int>(sizeof(int16_t)));

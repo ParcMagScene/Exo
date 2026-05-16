@@ -218,6 +218,28 @@ int TTSAudioSinkRtAudio::rtCallback(void *outputBuffer, void * /*inputBuffer*/,
             self->m_underflowCount.fetch_add(1, std::memory_order_relaxed);
     }
     self->m_framesWritten.fetch_add(nFrames, std::memory_order_relaxed);
+
+    // Telemetrie underflow : log periodique (toutes les ~5 s) si des
+    // underflows se sont produits depuis le dernier log. Permet de
+    // diagnostiquer un crackling silencieux a partir des logs.
+    if (self->m_running.load()) {
+        static thread_local uint64_t s_lastLoggedUnderflows = 0;
+        static thread_local uint64_t s_lastLoggedFrames     = 0;
+        const uint64_t framesNow = self->m_framesWritten.load(std::memory_order_relaxed);
+        const uint64_t framesSinceLog = framesNow - s_lastLoggedFrames;
+        const uint64_t intervalFrames = static_cast<uint64_t>(self->m_sampleRate) * 5; // ~5 s
+        if (framesSinceLog >= intervalFrames) {
+            const uint64_t totalUf = self->m_underflowCount.load(std::memory_order_relaxed);
+            const uint64_t deltaUf = totalUf - s_lastLoggedUnderflows;
+            if (deltaUf > 0) {
+                qWarning() << "[TTSAudioSink] underflows derniers 5s :" << deltaUf
+                           << "(total :" << totalUf
+                           << ", frames ecrites :" << framesNow << ")";
+            }
+            s_lastLoggedUnderflows = totalUf;
+            s_lastLoggedFrames     = framesNow;
+        }
+    }
     (void)status;
     return 0;
 }
