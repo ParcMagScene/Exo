@@ -1,3 +1,79 @@
+﻿
+from __future__ import annotations
+import os
+import sys
+import time
+import logging
+from pathlib import Path
+from typing import Optional
+import numpy as np
+
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+os.chdir("D:/EXO/")
+
+def profile_block(label, threshold_ms=5):
+    import time
+    from functools import wraps
+    def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            @wraps(func)
+            async def wrapper(*args, **kwargs):
+                t0 = time.monotonic()
+                result = await func(*args, **kwargs)
+                dt = (time.monotonic() - t0) * 1000
+                if dt > threshold_ms:
+                    logger.warning(f"[PERF] {label}: {dt:.1f} ms")
+                return result
+            return wrapper
+        else:
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                t0 = time.monotonic()
+                result = func(*args, **kwargs)
+                dt = (time.monotonic() - t0) * 1000
+                if dt > threshold_ms:
+                    logger.warning(f"[PERF] {label}: {dt:.1f} ms")
+                return result
+            return wrapper
+    return decorator
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+try:
+    import ujson as json
+except ImportError:
+    import json
+
+# --- Logging EXO centralisé (identique C++) ---
+
+# --- Logging EXO centralisé (identique C++) ---
+def _get_exo_logfile():
+    """Retourne le chemin du fichier de log EXO centralisé dans D:/EXO/logs/"""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    log_dir = os.environ.get("EXO_LOGS_DIR", str(project_root / "logs"))
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    ts = os.environ.get("EXO_SESSION_TIMESTAMP")
+    if not ts:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(log_dir, f"exo_{ts}.log")
+
+logfile = _get_exo_logfile()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [STT] %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("exo.stt")
+_file_handler = logging.FileHandler(logfile, encoding="utf-8", delay=False)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [STT] %(levelname)s %(message)s", datefmt="%H:%M:%S"))
+_file_handler.flush = _file_handler.stream.flush
+logger.addHandler(_file_handler)
+logger.propagate = True
+logger.info("=== EXO STT_SERVER STARTUP ===")
+
 """
 stt_server.py — EXO STT Streaming Server (multi-backend: whisper.cpp GPU / faster-whisper GPU/CPU)
 
@@ -5,30 +81,32 @@ WebSocket server that receives audio chunks (PCM16 16kHz mono)
 and returns streaming transcription results.
 
 Backends:
-  - whispercpp: Whisper.cpp + Vulkan GPU (default, fast)
-  - faster_whisper: faster-whisper GPU (CUDA float16) or CPU (int8 fallback)
-  - fasterwhisper_gpu: faster-whisper forced CUDA GPU
+    - whispercpp: Whisper.cpp + Vulkan GPU (default, fast)
+    - faster_whisper: faster-whisper GPU (CUDA float16) or CPU (int8 fallback)
+    - fasterwhisper_gpu: faster-whisper forced CUDA GPU
 
 Protocol:
-  → Binary: PCM16 audio chunks
-  → JSON:   {"type": "config", "model": "large-v3", "language": "fr", ...}
-             {"type": "start"}   — begin new utterance
-             {"type": "end"}     — finalize utterance
-             {"type": "cancel"}  — discard current utterance
-  ← JSON:   {"type": "partial", "text": "..."}
-             {"type": "final",   "text": "...", "segments": [...], "duration": float}
-             {"type": "ready",   "model": "...", "device": "..."}
-             {"type": "error",   "message": "..."}
+    → Binary: PCM16 audio chunks
+    → JSON:   {"type": "config", "model": "large-v3", "language": "fr", ...}
+                         {"type": "start"}   — begin new utterance
+                         {"type": "end"}     — finalize utterance
+                         {"type": "cancel"}  — discard current utterance
+    ← JSON:   {"type": "partial", "text": "..."}
+                         {"type": "final",   "text": "...", "segments": [...], "duration": float}
+                         {"type": "ready",   "model": "...", "device": "..."}
+                         {"type": "error",   "message": "..."}
 
 Dependencies:
-  pip install websockets numpy
-  (faster-whisper only needed when backend=faster_whisper)
+    pip install websockets numpy
+    (faster-whisper only needed when backend=faster_whisper)
 """
-
-from __future__ import annotations
-
 import asyncio
-import json
+
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
+
 import logging
 import os
 import sys
@@ -42,45 +120,40 @@ import numpy as np
 from shared.singleton_guard import ensure_single_instance
 from shared.base_service import init_v9, json_loads, json_dumps
 
+# --- Logging EXO centralisé (identique C++) ---
+
+def _get_exo_logfile():
+    """Retourne le chemin du fichier de log EXO centralisé dans D:/EXO/logs/"""
+    project_root = Path(__file__).resolve().parent.parent.parent
+    log_dir = os.environ.get("EXO_LOGS_DIR", str(project_root / "logs"))
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    ts = os.environ.get("EXO_SESSION_TIMESTAMP")
+    if not ts:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(log_dir, f"exo_{ts}.log")
+
+logfile = _get_exo_logfile()
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [STT] %(levelname)s %(message)s",
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("exo.stt")
+_file_handler = logging.FileHandler(logfile, encoding="utf-8", delay=False)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [STT] %(levelname)s %(message)s", datefmt="%H:%M:%S"))
+_file_handler.flush = _file_handler.stream.flush
 
-# ---------------------------------------------------------------------------
-# Noise reduction (optional)
-# ---------------------------------------------------------------------------
-
-_noisereduce_available = False
-try:
-    import noisereduce as nr
-    _noisereduce_available = True
-except ImportError:
-    pass
+logger.addHandler(_file_handler)
+logger.propagate = True
+logger.info("=== EXO STT_SERVER STARTUP ===")
 
 
-def _apply_noise_reduction(pcm16: np.ndarray, sr: int = 16000,
-                           strength: float = 0.7) -> np.ndarray:
-    """Apply spectral-gating noise reduction to PCM16 audio."""
-    if not _noisereduce_available or strength <= 0:
-        return pcm16
+# Log d'amorçage immédiat pour diagnostic (placé après l'ajout du handler)
+    # (Appel déplacé après l'init du logger)
 
-    audio_f32 = pcm16.astype(np.float32) / 32768.0
-    try:
-        cleaned = nr.reduce_noise(
-            y=audio_f32,
-            sr=sr,
-            prop_decrease=strength,
-            stationary=True,
-            n_fft=512,
-            hop_length=128,
-        )
-        return (cleaned * 32768.0).clip(-32768, 32767).astype(np.int16)
-    except Exception as e:
-        logger.warning("Noise reduction failed: %s", e)
-        return pcm16
 
 # ---------------------------------------------------------------------------
 # Configuration defaults
@@ -97,6 +170,31 @@ DEFAULT_BACKEND = "whispercpp"   # "whispercpp" (Vulkan GPU) or "faster_whisper"
 DEFAULT_THREADS = 6              # Optimised for RTX 3070 + Ryzen 5600
 SAMPLE_RATE = 16000
 NOISE_REDUCTION_STRENGTH = 0.3   # 0.0 = off, 1.0 = max (light: C++ AGC already normalises)
+
+try:
+    import noisereduce  # noqa: F401
+    _noisereduce_available = True
+except ImportError:
+    _noisereduce_available = False
+
+
+def _apply_noise_reduction(pcm: "np.ndarray", sr: int, strength: float) -> "np.ndarray":
+    """Apply spectral noise reduction if noisereduce is available.
+
+    Returns the input unchanged when the library is missing or strength <= 0.
+    Robust to errors: any exception falls back to the original PCM.
+    """
+    if not _noisereduce_available or strength is None or strength <= 0.0 or pcm is None or pcm.size == 0:
+        return pcm
+    try:
+        import noisereduce as _nr  # local import to avoid hard dep at module load
+        # noisereduce expects float32 in [-1, 1]
+        f = pcm.astype(np.float32) / 32768.0
+        reduced = _nr.reduce_noise(y=f, sr=sr, prop_decrease=float(max(0.0, min(1.0, strength))))
+        return np.clip(reduced * 32768.0, -32768, 32767).astype(np.int16)
+    except Exception as exc:  # pragma: no cover — safety net
+        logger.debug("noise reduction skipped: %s", exc)
+        return pcm
 
 # ---------------------------------------------------------------------------
 # Hallucination filter
@@ -224,7 +322,8 @@ class STTEngine:
             "large": "ggml-large-v3.bin",
         }
         model_file = model_map.get(self.model_size, f"ggml-{self.model_size}.bin")
-        model_dir = Path(os.environ.get("EXO_WHISPER_MODELS", r"D:\EXO\models\whisper"))
+        project_root = Path(__file__).resolve().parent.parent.parent
+        model_dir = Path(os.environ.get("EXO_WHISPER_MODELS", str(project_root / "models" / "whisper")))
         model_path = str(model_dir / model_file)
 
         if not os.path.isfile(model_path):
@@ -331,6 +430,8 @@ class STTSession:
         self._last_partial_time = 0.0
         self._consecutive_hallucinations = 0
         self._partial_running = False  # True while a partial transcription is in executor
+        self._engine_lock = asyncio.Lock()
+        self._expected_seq = None  # Numéro de séquence attendu (int)
 
     async def handle(self, ws) -> None:
         """Handle a WebSocket connection."""
@@ -355,6 +456,7 @@ class STTSession:
         finally:
             logger.info("STT client disconnected")
 
+    @profile_block("STT _on_json (parse+handle)", threshold_ms=5)
     async def _on_json(self, ws, raw: str) -> None:
         # v9.1: delegate standard protocol messages (ping, health, metrics, traces, errors)
         v9_resp = await _v9.handle_ws_message(ws, raw)
@@ -370,14 +472,28 @@ class STTSession:
         msg_type = msg.get("type", "")
 
         if msg_type == "start":
+            seq = msg.get("seq")
+            if seq is None:
+                logger.debug("[SEQ] start sans champ 'seq' (resync auto sur premier chunk)")
+                self._expected_seq = None
+            else:
+                self._expected_seq = int(seq) + 1
             self._req_id = _v9.begin_request()
             self._audio_buffer.clear()
             self._recording = True
             self._last_partial_time = time.monotonic()
             self._consecutive_hallucinations = 0
-            logger.debug("Recording started")
+            logger.debug(f"Recording started (seq={seq})")
 
         elif msg_type == "end":
+            seq = msg.get("seq")
+            if seq is not None and self._expected_seq is not None and int(seq) != self._expected_seq:
+                logger.debug(
+                    "[SEQ] end seq=%s, attendu=%s (resync silencieux)",
+                    seq, self._expected_seq,
+                )
+            if seq is not None:
+                self._expected_seq = int(seq) + 1
             self._recording = False
             await self._finalize(ws)
             self._audio_buffer.clear()  # P1.2: Cleanup after end
@@ -403,12 +519,38 @@ class STTSession:
             logger.info("Config updated: lang=%s beam=%d",
                         self.engine.language, self.engine.beam_size)
 
+    @profile_block("STT _on_audio (buffer)", threshold_ms=10)
     async def _on_audio(self, ws, data: bytes) -> None:
         if not self._recording:
             return
 
+        # Extraction du numéro de séquence (4 octets LE en tête)
+        if len(data) < 4:
+            msg_err = "[SEQ] Chunk audio trop court pour contenir le numéro de séquence !"
+            logger.error(msg_err)
+            await ws.send(json.dumps({
+                "type": "error",
+                "message": msg_err
+            }))
+            return
+        seq = int.from_bytes(data[:4], byteorder="little")
+        audio = data[4:]
+        if self._expected_seq is None:
+            # Resync auto : on adopte la séquence client comme baseline
+            logger.debug("[SEQ] resync baseline sur seq=%s", seq)
+            self._expected_seq = seq + 1
+        elif seq != self._expected_seq:
+            # Désync ponctuelle : on re-synchronise silencieusement, on ne perd pas l'audio
+            logger.debug(
+                "[SEQ] resync : reçu seq=%s, attendu=%s (nouvelle baseline)",
+                seq, self._expected_seq,
+            )
+            self._expected_seq = seq + 1
+        else:
+            self._expected_seq = seq + 1
+
         # P1.2: Check buffer size to prevent DoS attack
-        new_size = len(self._audio_buffer) + len(data)
+        new_size = len(self._audio_buffer) + len(audio)
         if new_size > self.MAX_AUDIO_BUFFER_SIZE:
             error_msg = f"Audio buffer overflow: {new_size} > {self.MAX_AUDIO_BUFFER_SIZE}"
             logger.error(error_msg)
@@ -418,7 +560,7 @@ class STTSession:
             }))
             return
 
-        self._audio_buffer.extend(data)
+        self._audio_buffer.extend(audio)
 
         # Send partial transcription periodically (non-blocking)
         now = time.monotonic()
@@ -430,6 +572,7 @@ class STTSession:
             self._last_partial_time = now
             asyncio.create_task(self._send_partial(ws))
 
+    @profile_block("STT _send_partial (transcribe)", threshold_ms=20)
     async def _send_partial(self, ws) -> None:
         """Transcribe current buffer for partial result (runs as background task)."""
         if not self._audio_buffer:
@@ -440,12 +583,19 @@ class STTSession:
             return
 
         self._partial_running = True
-        pcm = np.frombuffer(bytes(self._audio_buffer), dtype=np.int16)
+        # J5 (audit perf 2026-05-14) : np.frombuffer accepte un bytearray
+        # directement (vue zero-copy). bytes(...) creait une copie inutile
+        # de tout le buffer audio (typ. 16-48 KB par appel).
+        pcm = np.frombuffer(self._audio_buffer, dtype=np.int16)
         try:
             loop = asyncio.get_running_loop()
-            result = await loop.run_in_executor(
-                None, lambda: self.engine.transcribe(pcm)
-            )
+            async with self._engine_lock:
+                if not self._recording:
+                    # Final has fired and acquired the lock first — abort partial
+                    return
+                result = await loop.run_in_executor(
+                    None, lambda: self.engine.transcribe(pcm)
+                )
             if not self._recording:
                 # Recording stopped while partial was running — skip sending
                 return
@@ -468,17 +618,12 @@ class STTSession:
         finally:
             self._partial_running = False
 
+    @profile_block("STT _finalize (transcribe)", threshold_ms=20)
     async def _finalize(self, ws) -> None:
         """Transcribe final utterance."""
-        # Wait for any in-progress partial to finish (engine is not thread-safe)
-        wait_start = time.monotonic()
-        while self._partial_running:
-            await asyncio.sleep(0.05)
-            if time.monotonic() - wait_start > 2.0:
-                logger.warning("Waited 2s for partial — proceeding anyway (partial may overlap)")
-                break
-        if self._partial_running:
-            logger.warning("Partial still running, but proceeding with finalize")
+        # Mark recording stopped so any pending partial aborts cleanly when it
+        # acquires the engine lock (no double POST to whisper-server).
+        self._recording = False
 
         if not self._audio_buffer:
             await ws.send(json.dumps({
@@ -489,7 +634,9 @@ class STTSession:
             }))
             return
 
-        pcm = np.frombuffer(bytes(self._audio_buffer), dtype=np.int16)
+        # J5 : zero-copy view sur bytearray (cf. _send_partial). On copie
+        # ensuite via np.array() avant clear() pour ne pas invalider la vue.
+        pcm = np.array(np.frombuffer(self._audio_buffer, dtype=np.int16), copy=True)
         self._audio_buffer.clear()
 
         # ── DSP: Noise reduction ──
@@ -502,10 +649,15 @@ class STTSession:
             if peak < target_peak:
                 gain = target_peak / peak
                 gain = min(gain, 6.0)  # cap at ~16 dB (C++ AGC handles most of it)
-                pcm = np.clip(pcm.astype(np.float64) * gain, -32768, 32767).astype(np.int16)
+                # J5 : float32 suffit (PCM int16 * gain <= 6 -> max ~2e5,
+                # bien dans la mantisse float32). float64 doublait la BP
+                # memoire et la latence du multiply pour aucun gain de precision.
+                pcm = np.clip(pcm.astype(np.float32) * gain, -32768, 32767).astype(np.int16)
 
         # ── DEBUG: PCM statistics ──
-        rms = np.sqrt(np.mean(pcm.astype(np.float64) ** 2))
+        # J5 : float32 OK (somme de carres int16, pcm <= 24kHz * 30s = 720k
+        # samples, max sumSq < 720k * 32768^2 ~= 7.7e14, dans la limite float32).
+        rms = float(np.sqrt(np.mean(pcm.astype(np.float32) ** 2)))
         peak = int(np.max(np.abs(pcm)))
         dur = len(pcm) / SAMPLE_RATE
         logger.info("PCM stats: samples=%d dur=%.2fs rms=%.1f peak=%d (%.1f dBFS)",
@@ -514,12 +666,13 @@ class STTSession:
         try:
             loop = asyncio.get_running_loop()
             t0 = time.monotonic()
-            result = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None, lambda: self.engine.transcribe(pcm)
-                ),
-                timeout=20.0
-            )
+            async with self._engine_lock:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None, lambda: self.engine.transcribe(pcm)
+                    ),
+                    timeout=20.0
+                )
             transcribe_ms = (time.monotonic() - t0) * 1000
             logger.info("[Latency] STT final: %.0f ms text_len=%d result=%s",
                         transcribe_ms, len(result["text"]), result["text"][:60])
@@ -630,13 +783,52 @@ async def main() -> None:
                 args.host, args.port, args.model, engine.actual_device, engine._active_backend)
     logger.info("[Latency] Streaming: OK — ready for low-latency transcription")
 
+    # Keepalive : evite que le GPU Vulkan / whisper-server s'endorme apres inactivite.
+    # On envoie un audio silencieux toutes les 45s pour garder le pipeline chaud.
+    _keepalive_lock = asyncio.Lock()
+
+    async def _keepalive_loop():
+        silent_pcm = np.zeros(int(SAMPLE_RATE * 0.4), dtype=np.int16)
+        loop = asyncio.get_running_loop()
+        logger.info("[Keepalive] loop started (interval=20s, skip<15s)")
+        while True:
+            await asyncio.sleep(20.0)
+            # Skip if real transcription already kept the engine warm recently.
+            if time.monotonic() - getattr(engine, "last_transcribe_ts", 0.0) < 15.0:
+                continue
+            try:
+                async with _keepalive_lock:
+                    await loop.run_in_executor(None, lambda: engine.transcribe(silent_pcm))
+                logger.info("[Keepalive] whisper-server warm")
+            except Exception as e:
+                logger.warning("[Keepalive] failed: %s", e)
+
+    keepalive_task = asyncio.create_task(_keepalive_loop())
+
     try:
-        await asyncio.Future()  # run forever
+        from python.shared.graceful_shutdown import install_shutdown
+    except ImportError:
+        import sys, pathlib
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+        from python.shared.graceful_shutdown import install_shutdown
+    token = install_shutdown(name="stt")
+
+    try:
+        await token.wait()
     except KeyboardInterrupt:
         pass
     finally:
+        logger.info("STT server: arrêt en cours")
+        keepalive_task.cancel()
+        try:
+            await asyncio.wait_for(asyncio.gather(keepalive_task, return_exceptions=True), timeout=2.0)
+        except asyncio.TimeoutError:
+            pass
         server.close()
-        await server.wait_closed()
+        try:
+            await asyncio.wait_for(server.wait_closed(), timeout=2.0)
+        except asyncio.TimeoutError:
+            pass
         engine.close()
         logger.info("STT server stopped")
 
@@ -646,3 +838,7 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+    except Exception:
+        logger.exception("STT server fatal error")
+        sys.exit(1)
+

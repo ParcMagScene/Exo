@@ -41,7 +41,8 @@ log = logging.getLogger("file_service")
 
 PORT = 8781
 MAX_FILE_SIZE = 1_000_000  # 1 MB max read/write
-SANDBOX_DIR = Path(os.environ.get("EXO_FILES_DIR", r"D:\EXO\files"))
+project_root = Path(__file__).resolve().parent.parent.parent
+SANDBOX_DIR = Path(os.environ.get("EXO_FILES_DIR", str(project_root / "files")))
 
 # Forbidden extensions (security)
 FORBIDDEN_EXTENSIONS = {".exe", ".bat", ".cmd", ".ps1", ".vbs", ".js",

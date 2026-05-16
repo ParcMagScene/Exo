@@ -36,7 +36,14 @@ LogManager::LogManager(QObject *parent)
     , m_consoleEnabled(true)
     , m_fileEnabled(true)
     , m_oldHandler(nullptr)
+    , m_sessionTimestamp()
 {
+    generateSessionTimestamp();
+}
+void LogManager::generateSessionTimestamp()
+{
+    // Format : YYYYMMDD_HHMMSS
+    m_sessionTimestamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
 }
 
 LogManager::~LogManager()
@@ -87,12 +94,15 @@ void LogManager::enableFileLogging(const QString &logFilePath)
 {
     if (logFilePath.isEmpty()) {
         QString logDir = qEnvironmentVariable("EXO_LOGS_DIR", QStringLiteral("D:/EXO/logs"));
-        QDir().mkpath(logDir);
-        m_logFilePath = QDir(logDir).filePath("exo.log");
+        if (!QDir().mkpath(logDir)) {
+            fprintf(stderr, "[LogManager] mkpath failed for %s\n", qPrintable(logDir));
+        }
+        // Utiliser le timestamp de session pour le nom du fichier
+        m_logFilePath = QDir(logDir).filePath(QString("exo_%1.log").arg(m_sessionTimestamp));
     } else {
         m_logFilePath = logFilePath;
     }
-    
+
     m_fileEnabled = true;
     createLogFile();
     hLog() << "Logging fichier activé:" << m_logFilePath;
@@ -166,8 +176,11 @@ void LogManager::createLogFile()
     
     // S'assurer que le répertoire existe
     QFileInfo fileInfo(m_logFilePath);
-    QDir().mkpath(fileInfo.absolutePath());
-    
+    if (!QDir().mkpath(fileInfo.absolutePath())) {
+        fprintf(stderr, "[LogManager] mkpath failed for %s\n",
+                qPrintable(fileInfo.absolutePath()));
+    }
+
     // Le fichier sera créé automatiquement lors de la première écriture
 }
 
@@ -224,6 +237,7 @@ void LogManager::handleMessage(QtMsgType type, const QMessageLogContext &context
         if (logFile.open(QIODevice::WriteOnly | QIODevice::Append)) {
             QTextStream stream(&logFile);
             stream << formattedMsg << Qt::endl;
+            stream.flush(); // flush explicite pour visibilité immédiate
         }
     }
     
@@ -242,7 +256,7 @@ void LogManager::rotateIfNeeded()
     if (!fi.exists() || fi.size() < MAX_LOG_FILE_SIZE)
         return;
 
-    // Rotate: exo.log.3 → delete, exo.log.2 → .3, exo.log.1 → .2, exo.log → .1
+    // Rotation par session : exo_YYYYMMDD_HHMMSS.log.N
     for (int i = MAX_LOG_BACKUP_COUNT; i >= 1; --i) {
         QString src = (i == 1) ? m_logFilePath
                                : m_logFilePath + QStringLiteral(".%1").arg(i - 1);
@@ -272,6 +286,7 @@ void LogManager::logPipelineEvent(const QJsonObject &event)
         if (logFile.open(QIODevice::WriteOnly | QIODevice::Append)) {
             QTextStream stream(&logFile);
             stream << "[PIPELINE] " << compact << Qt::endl;
+            stream.flush(); // flush explicite pour visibilité immédiate
         }
     }
 }

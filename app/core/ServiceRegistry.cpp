@@ -125,6 +125,16 @@ QVariantList ServiceRegistry::serviceStatuses() const
         m[QStringLiteral("phase")]  = Exo::readinessPhaseToString(it->phase);
         m[QStringLiteral("pid")]    = it->pid;
         m[QStringLiteral("retries")] = it->retryCount;
+
+        // Champs détaillés pour le SplashScreen
+        m[QStringLiteral("message")]        = it->message;
+        m[QStringLiteral("startupTimeMs")]  = it->startupTimeMs;
+        m[QStringLiteral("latencyMs")]      = it->latencyMs;
+        m[QStringLiteral("restarts")]       = it->restarts;
+        m[QStringLiteral("lastHeartbeat")]  = it->lastHeartbeat;
+        m[QStringLiteral("cpu")]            = it->cpu;
+        m[QStringLiteral("ram")]            = it->ram;
+
         list.append(m);
     }
     return list;

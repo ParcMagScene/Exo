@@ -936,7 +936,7 @@ Rectangle {
                     color: Theme.border
                 }
 
-                // ── Section : TTS Voice (CosyVoice2 / Orpheus) ──
+                // ── Section : TTS Voice (Orpheus 3B FR) ──
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing8
@@ -966,9 +966,6 @@ Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 30
                             model: ListModel {
-                                ListElement { text: "CosyVoice2 (CUDA)";    value: "cosyvoice2_cuda" }
-                                ListElement { text: "CosyVoice2 (CPU)";     value: "cosyvoice2_cpu" }
-                                ListElement { text: "CosyVoice2 (Auto)";    value: "cosyvoice2_auto" }
                                 ListElement { text: "Orpheus 3B FR (CUDA)"; value: "orpheus_cuda" }
                                 ListElement { text: "Qt TTS (fallback)";   value: "qt_fallback" }
                             }
@@ -976,7 +973,7 @@ Rectangle {
                             valueRole: "value"
 
                             // Synchronise le combo avec le moteur reellement actif cote serveur
-                            // via /health (engine = "orpheus-gguf" | "cosyvoice"|...).
+                            // via /health (engine = "orpheus-gguf").
                             // Lance au demarrage et apres chaque changement.
                             function syncFromServer() {
                                 var xhr = new XMLHttpRequest()
@@ -989,7 +986,6 @@ Rectangle {
                                         var eng = (h.engine || "").toLowerCase()
                                         var target = ""
                                         if (eng.indexOf("orpheus") === 0) target = "orpheus_cuda"
-                                        else if (eng.indexOf("cosy") === 0) target = "cosyvoice2_cuda"
                                         if (!target) return
                                         for (var i = 0; i < engineCombo.model.count; i++) {
                                             if (engineCombo.model.get(i).value === target) {
@@ -1006,7 +1002,13 @@ Rectangle {
 
                             Component.onCompleted: {
                                 var engine = typeof configManager !== 'undefined'
-                                             ? configManager.getTTSEngine() : "cosyvoice2_cuda"
+                                             ? configManager.getTTSEngine() : "orpheus_cuda"
+                                // Migration auto : valeurs heritees -> Orpheus
+                                if (engine.indexOf("cosy") === 0) {
+                                    engine = "orpheus_cuda"
+                                    if (typeof configManager !== 'undefined')
+                                        configManager.setTTSEngine(engine)
+                                }
                                 for (var i = 0; i < model.count; i++) {
                                     if (model.get(i).value === engine) {
                                         currentIndex = i

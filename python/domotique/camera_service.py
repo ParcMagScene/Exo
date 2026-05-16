@@ -153,7 +153,11 @@ async def handle_client(ws, svc: CameraService) -> None:
         async for raw in ws:
             if not isinstance(raw, str):
                 continue
-            msg = json.loads(raw)
+            try:
+                msg = json.loads(raw)
+            except (ValueError, TypeError) as e:
+                log.warning("camera: invalid JSON dropped (%s): %.80s", e, raw)
+                continue
             action = msg.get("action", msg.get("type", ""))
             params = msg.get("params", {})
 

@@ -21,6 +21,10 @@
 #include <cmath>
 #include <atomic>
 
+#include "AudioProfiler.h"
+#include "AudioAnomalyDetector.h"
+#include "AudioAutoCorrector.h"
+
 // ─────────────────────────────────────────────────────
 //  ProsodyProfile — pitch / rate / volume per utterance
 // ─────────────────────────────────────────────────────
@@ -134,33 +138,53 @@ private:
 };
 
 // ─────────────────────────────────────────────────────
-//  PCMRingBuffer — lock-free circular PCM buffer
+//  PCMRingBuffer — SPSC lock-free PCM16 ring buffer
 //
-//  Fixed-capacity ring buffer for streaming PCM between
-//  TTS worker (write) and persistent audio sink (read).
-//  Single-thread access only (main thread).
+//  - capacite arrondie a la puissance de 2 superieure (mask au lieu de modulo)
+//  - indices atomiques (single-producer / single-consumer safe)
+//  - API legacy byte-based (write / read / availableRead) preservee
+//  - API native PCM16 (pushSamples / popBlock) :
+//      * push : drop controle si overflow + log
+//      * popBlock : retourne TOUJOURS un bloc complet,
+//                   silence-fill si underflow (zero craquement)
 // ─────────────────────────────────────────────────────
 class PCMRingBuffer
 {
 public:
-    explicit PCMRingBuffer(int capacity = 480000);  // ~10s @ 24kHz mono 16bit
+    explicit PCMRingBuffer(int capacityBytes = 1048576); // ~5.4s @ 48kHz stereo 16bit (POT)
 
-    int  write(const char *data, int size);
-    int  read(char *data, int maxSize);
-    int  availableRead()  const { return m_count; }
-    int  availableWrite() const { return m_capacity - m_count; }
-    bool isEmpty()        const { return m_count == 0; }
+    // ── Legacy byte-based API (utilisee par feedRingBuffer / pumpBuffer) ──
+    int  write(const char *data, int size);          // bytes ; renvoie ce qui a ete ecrit
+    int  read(char *data, int maxSize);              // bytes ; renvoie ce qui a ete lu
+    int  availableRead()  const;                     // bytes
+    int  availableWrite() const;                     // bytes
+    bool isEmpty()        const { return availableRead() == 0; }
     void clear();
+
+    // ── PCM16 native API (anti-craquements) ──
+    /// Push N samples int16. Renvoie le nombre reellement ecrit.
+    /// N'ecrase JAMAIS la zone non lue ; surplus = drop + log.
+    int  pushSamples(const int16_t *samples, int count);
+    /// Pop EXACTEMENT count samples. Si underflow : silence-fill + log.
+    /// Renvoie toujours count.
+    int  popBlock(int16_t *out, int count);
+    /// Avance le readPos sans copier (drain controle).
+    void dropSamples(int count);
 
     /// Apply cosine fade-out to the last fadeBytes of buffered data
     void fadeOutTail(int fadeBytes);
 
+    int  capacityBytes() const { return m_capacity; }
+
 private:
+    static int roundUpPow2(int v);
+
     std::vector<char> m_buf;
-    int m_capacity;
-    int m_readPos  = 0;
-    int m_writePos = 0;
-    int m_count    = 0;
+    int m_capacity = 0;   // power of 2, bytes
+    int m_mask     = 0;   // m_capacity - 1
+    // SPSC : indices monotoniques en bytes. Producer ecrit head, consumer ecrit tail.
+    alignas(64) std::atomic<int> m_head{0};
+    alignas(64) std::atomic<int> m_tail{0};
 };
 
 // ─────────────────────────────────────────────────────
@@ -174,6 +198,9 @@ struct TTSRequest
 };
 
 class TTSBackend;
+#ifdef ENABLE_RTAUDIO
+class TTSAudioSinkRtAudio;
+#endif
 class TTSBackendQt;
 #ifdef ENABLE_XTTS
 class TTSBackendXTTS;
@@ -222,7 +249,7 @@ private:
 #ifdef ENABLE_XTTS
     TTSBackendXTTS *m_xttsBackend = nullptr;
 #endif
-    std::atomic<bool> m_cancelled{false};
+    alignas(64) std::atomic<bool> m_cancelled{false};
 
     static constexpr int MAX_RETRIES = 2;
 };
@@ -272,6 +299,12 @@ public:
     Q_INVOKABLE void setStyle(const QString &s);
     Q_INVOKABLE void setLanguage(const QString &lang);
     Q_INVOKABLE void setDSPEnabled(bool on);
+    Q_INVOKABLE void setAudioProfilingEnabled(bool on) { m_audioProfiler.setEnabled(on); }
+    Q_INVOKABLE void setAudioProfilingIntervalMs(int ms) { m_audioProfiler.setLogIntervalMs(ms); }
+    Q_INVOKABLE void setAudioAnomalyDetectionEnabled(bool on) { m_audioAnomalies.setEnabled(on); m_enableAudioAnomalyDetection = on; }
+    Q_INVOKABLE void setAudioAnomalyDetectionIntervalMs(int ms) { m_audioAnomalies.setLogIntervalMs(ms); }
+    Q_INVOKABLE void setAudioAutoCorrectionEnabled(bool on) { m_audioAutoCorrector.setEnabled(on); m_enableAudioAutoCorrection = on; }
+    Q_INVOKABLE void setAudioAutoCorrectionVerbose(bool on) { m_audioAutoCorrector.setVerbose(on); }
     Q_INVOKABLE void setCascadeEnabled(bool on);
     Q_INVOKABLE void setPythonUrl(const QString &url);
     Q_INVOKABLE void setOutputDevicePreference(const QString &deviceName);
@@ -317,14 +350,28 @@ private:
     void destroySink();
     void finalizeSpeech();
     void onSinkStateChanged(QAudio::State state);
+#ifdef ENABLE_RTAUDIO
+    // Flush du staging RtAudio + start du stream. Appele soit quand le
+    // seuil prebuffer est atteint, soit quand worker termine.
+    void flushRtPrebuffer(const char *reason);
+#endif
     void broadcastWaveform(const QByteArray &pcm);
     void broadcastState(const QString &state);
-    QByteArray adaptForOutputFormat(const QByteArray &pcm) const;
+    QByteArray adaptForOutputFormat(const QByteArray &pcm);
     int outputBytesPerSecond() const;
+    void resetResamplerState();
+
+    // ── streaming linear resampler state (24 kHz mono -> device format) ──
+    // Persistant entre chunks pour eviter une discontinuite a chaque
+    // frontiere de 40 ms (cause de craquements periodiques ~25 Hz).
+    double  m_resampleSrcPos    = 0.0;   // position fractionnaire dans le flux source
+    int16_t m_resampleLastSample = 0;    // dernier sample du chunk source precedent
+    bool    m_resampleHasHistory = false;
 
     // ── state ──
-    std::atomic<bool> m_speaking{false};
-    std::atomic<bool> m_processingGuard{false}; // prevents re-entrant processQueue
+    // alignas(64): evite false-sharing avec PCMRingBuffer indices (callback RtAudio temps-reel)
+    alignas(64) std::atomic<bool> m_speaking{false};
+    alignas(64) std::atomic<bool> m_processingGuard{false}; // prevents re-entrant processQueue
     bool m_synthesizing = false;  // true while worker is producing chunks for current phrase
     bool m_turnActive   = false;  // true while a speech turn is ongoing (spans chained phrases)
     bool m_cascadeEnabled = true;
@@ -347,9 +394,23 @@ private:
     QAudioFormat m_deviceFormat;
     std::unique_ptr<QAudioSink> m_sink;
     QIODevice *m_sinkIO = nullptr;
+    QIODevice *m_pullDevice = nullptr; // RingPullDevice (mode PULL anti-craquements)
     PCMRingBuffer m_ringBuffer;       // circular PCM buffer between TTS and sink
     QTimer    *m_pumpTimer = nullptr; // feeds sink from ring buffer
+    bool       m_useRtAudioSink = false; // true si TTSAudioSinkRtAudio actif (bypasse pump+QAudioSink)
+#ifdef ENABLE_RTAUDIO
+    std::unique_ptr<TTSAudioSinkRtAudio> m_rtSink;
+    QByteArray m_rtPrebufStage;          // accumulateur pre-flush vers ring (anti-click debut de phrase)
+    bool       m_rtNeedsPrebuf = true;   // true entre 2 phrases : mode staging actif
+    bool       m_sinkWarmedUp = false;   // false jusqu'au 1er flush de la session : injecte 200 ms de silence
+                                         // pour absorber le warmup WASAPI (sinon 1re syllabe coupee)
+#endif
     qint64     m_totalPcmBytes = 0;   // diagnostic counter
+    AudioProfiler m_audioProfiler;    // real-time audio profiling (opt-in)
+    AudioAnomalyDetector m_audioAnomalies; // detection automatique d'anomalies audio
+    bool          m_enableAudioAnomalyDetection = true; // mode debug par defaut
+    AudioAutoCorrector m_audioAutoCorrector;       // auto-correction temps reel (Phase 10)
+    bool          m_enableAudioAutoCorrection = false; // OFF: silence-fill cause des clics audio
 
     // ── worker thread ──
     QThread      m_workerThread;
@@ -376,7 +437,7 @@ private:
     QString m_outputDevicePreference;
 
     // ── constants ──
-    static constexpr int SAMPLE_RATE     = 24000; // CosyVoice2 native rate
+    static constexpr int SAMPLE_RATE     = 24000; // Orpheus native rate (24 kHz)
     static constexpr int CHANNELS        = 1;
     static constexpr int BITS_PER_SAMPLE = 16;
     static constexpr int PUMP_INTERVAL_MS = 5;    // v27: reduced from 10ms

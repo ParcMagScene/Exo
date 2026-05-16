@@ -19,6 +19,9 @@ class AssistantToolDispatcher;
 class AssistantFastPathEngine;
 class AssistantSafeBootFacade;
 class AssistantConnectionBinder;
+class AssistantMessageRouter;
+class AssistantErrorManager;
+class AssistantLifecycleManager;
 
 Q_DECLARE_METATYPE(ConfigManager*)
 
@@ -52,6 +55,7 @@ public:
     bool isInitialized() const { return m_isInitialized; }
     
     // Configuration
+    // Délégation au lifecycle manager
     void setQmlEngine(QQmlApplicationEngine *engine);
     void initConfigEarly(const QString &configPath = "config/assistant.conf");
 
@@ -129,6 +133,8 @@ private slots:
     void onConfigurationLoaded();
 
 private:
+            AssistantMessageRouter* m_messageRouter = nullptr;
+        AssistantErrorManager* m_errorManager = nullptr;
     friend class AssistantConnectionBinder;
 
     void initializeComponents();
@@ -147,6 +153,11 @@ private:
     QString m_currentTraceId;
     
     // Composants
+// Ajout du LifecycleManager
+
+private:
+    // Nouveau : gestionnaire de cycle de vie
+    AssistantLifecycleManager* m_lifecycleManager = nullptr;
     ConfigManager *m_configManager;
     ClaudeAPI *m_claudeApi;
     VoicePipeline *m_voicePipeline;

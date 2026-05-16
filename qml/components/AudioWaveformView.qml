@@ -17,6 +17,9 @@ import QtQuick
 // ═══════════════════════════════════════════════════════
 
 Item {
+        Component.onDestruction: {
+            console.warn("[MEMORY] AudioWaveformView détruit:", root)
+        }
     id: root
 
     // ── Public API ──
@@ -171,10 +174,11 @@ Item {
         return a
     }
 
-    // ── Timer adaptatif : 60 FPS actif / 12 FPS idle ──
+    // v6.0 perf audit : 30 FPS actif suffit visuellement (4 canvases = ~10 ms GPU/frame).
+    // 60 FPS gaspillait ~120-300 ms GPU/sec sans gain percu (waveform organique).
     Timer {
         id: animTimer
-        interval: root.active ? 16 : 83   // 60 FPS actif, 12 FPS idle
+        interval: root.active ? 33 : 100   // 30 FPS actif, 10 FPS idle
         running: root.visible
         repeat: true
         onTriggered: {

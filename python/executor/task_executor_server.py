@@ -1,5 +1,9 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
+
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+import os
+os.chdir("D:/EXO/")
 EXO v10 — TaskExecutor Server (WebSocket)
 Port 8779 — Exécution séquentielle/parallèle des plans avec pause/resume
 
@@ -27,7 +31,10 @@ Protocol WebSocket :
 """
 
 import asyncio
-import json
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
 import logging
 import sys
 import time
@@ -42,12 +49,52 @@ except ImportError:
 from shared.singleton_guard import ensure_single_instance
 from shared.base_service import init_v9
 
+
+# --- Logging EXO centralisé (identique C++) ---
+import os
+from pathlib import Path
+def _get_exo_logfile():
+    # Correction : tous les logs doivent aller dans D:/EXO/logs/
+    log_dir = os.environ.get("EXO_LOGS_DIR", "D:/EXO/logs")
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    ts = os.environ.get("EXO_SESSION_TIMESTAMP")
+    if not ts:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(log_dir, f"exo_{ts}.log")
+
+logfile = _get_exo_logfile()
+
+_file_handler = logging.FileHandler(logfile, encoding="utf-8", delay=False)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [Executor] %(message)s"))
+_file_handler.flush = _file_handler.stream.flush
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [Executor] %(message)s")
 log = logging.getLogger("task_executor")
+log.addHandler(_file_handler)
+log.propagate = True
+log.info("=== EXO TASK_EXECUTOR_SERVER STARTUP ===")
+_file_handler.flush()
 
 PORT = 8779
 STEP_TIMEOUT = 30.0
 MAX_RETRIES = 3
+
+
+async def _safe_notify(ws: Any, payload: dict) -> bool:
+    """Send a notification on a WebSocket without crashing the executor.
+
+    Returns True if the message was sent, False if the WS was already closed
+    or another error occurred (logged but swallowed).
+    """
+    try:
+        await ws.send(json.dumps(payload))
+        return True
+    except Exception as exc:  # ConnectionClosed*, RuntimeError, etc.
+        log.warning("notify_ws.send dropped (%s): %.80s",
+                    type(exc).__name__, payload.get("type", ""))
+        return False
 
 # ── Tool → Service mapping ─────────────────────────
 TOOL_SERVICE_MAP = {
@@ -134,13 +181,13 @@ class TaskExecutor:
             state.errors[-1] = "Erreur interne d'exécution"
 
         # Send final notification
-        await notify_ws.send(json.dumps({
+        await _safe_notify(notify_ws, {
             "type": "plan_completed",
             "plan_id": plan_id,
             "status": state.status,
             "results": {str(k): v for k, v in state.results.items()},
             "errors": {str(k): v for k, v in state.errors.items()},
-        }))
+        })
 
         return state.to_dict()
 
@@ -213,25 +260,25 @@ class TaskExecutor:
         description = step.get("description", "")
 
         # Notify step started
-        await notify_ws.send(json.dumps({
+        await _safe_notify(notify_ws, {
             "type": "step_started",
             "plan_id": state.plan_id,
             "step_index": idx,
             "tool": tool,
             "description": description,
-        }))
+        })
 
         try:
             result = await self._dispatch_to_service(tool, params)
             state.results[idx] = result
 
-            await notify_ws.send(json.dumps({
+            await _safe_notify(notify_ws, {
                 "type": "step_completed",
                 "plan_id": state.plan_id,
                 "step_index": idx,
                 "status": "completed",
                 "result": result,
-            }))
+            })
             log.info("Step %d completed (plan %s): %s", idx, state.plan_id, tool)
 
         except Exception as e:
@@ -240,13 +287,13 @@ class TaskExecutor:
             error_msg = "Erreur interne d'exécution"
             state.errors[idx] = error_msg
 
-            await notify_ws.send(json.dumps({
+            await _safe_notify(notify_ws, {
                 "type": "step_failed",
                 "plan_id": state.plan_id,
                 "step_index": idx,
                 "status": "failed",
                 "error": error_msg,
-            }))
+            })
 
     async def _dispatch_to_service(self, tool: str, params: dict) -> dict:
         """Dispatch a tool call to the appropriate microservice via WebSocket."""
@@ -338,7 +385,13 @@ class TaskExecutor:
 
 async def handle_client(ws, executor: TaskExecutor) -> None:
     log.info("Executor client connected")
-    await ws.send(json.dumps({"type": "ready", "service": "task_executor", "version": "v10"}))
+    await ws.send(json.dumps({
+        "type": "ready",
+        "service": "task_executor",
+        "model": "n/a",
+        "device": "n/a",
+        "backend": "n/a"
+    }))
 
     try:
         async for raw in ws:

@@ -1,4 +1,7 @@
 #include "TTSManager.h"
+#ifdef ENABLE_RTAUDIO
+#include "TTSAudioSinkRtAudio.h"
+#endif
 #include "TTSBackend.h"
 #include "TTSBackendQt.h"
 #ifdef ENABLE_XTTS
@@ -13,10 +16,49 @@
 #include <QCoreApplication>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QFile>
 #include <QtEndian>
 #include <algorithm>
 #include <cstring>
 #include <cmath>
+#include <chrono>
+
+// ═══════════════════════════════════════════════════════
+//  RingPullDevice — QIODevice qui sert le PCM en mode PULL
+//  Qt appelle readData() quand IL le decide, basculement
+//  push -> pull elimine les craquements WASAPI lies au timer
+//  Windows imprecis (CoarseTimer, scheduling 15-40 ms).
+// ═══════════════════════════════════════════════════════
+class RingPullDevice : public QIODevice
+{
+public:
+    explicit RingPullDevice(PCMRingBuffer *ring, QObject *parent = nullptr)
+        : QIODevice(parent), m_ring(ring) {}
+
+    bool isSequential() const override { return true; }
+    qint64 bytesAvailable() const override
+    {
+        // Toujours dispo : si le ring est vide on remplit de silence.
+        // 1 MB virtuel suffit a satisfaire Qt sans declencher EOF.
+        return 1 << 20;
+    }
+
+protected:
+    qint64 readData(char *data, qint64 maxSize) override
+    {
+        if (!m_ring || maxSize <= 0) return 0;
+        const int got = m_ring->read(data, static_cast<int>(maxSize));
+        if (got < static_cast<int>(maxSize)) {
+            // Silence-fill -> Qt ne stoppe jamais le sink, zero glitch.
+            std::memset(data + got, 0, static_cast<size_t>(maxSize - got));
+        }
+        return maxSize;
+    }
+    qint64 writeData(const char *, qint64 len) override { return len; }
+
+private:
+    PCMRingBuffer *m_ring = nullptr;
+};
 
 // ═══════════════════════════════════════════════════════
 //  TTSEqualizer — 2nd-order peaking EQ (presence band)
@@ -248,61 +290,165 @@ void TTSDSPProcessor::setNormTarget(float dBFS)
 }
 
 // ═══════════════════════════════════════════════════════
-//  PCMRingBuffer — circular buffer for persistent sink
+//  PCMRingBuffer — SPSC lock-free PCM16 ring buffer
+//
+//  Indices monotoniques en bytes : head (producer) / tail (consumer),
+//  acquire/release pour la visibilite memoire. Capacite POT, mask
+//  remplace le modulo. availableRead = head - tail (jamais negatif
+//  dans un usage SPSC). availableWrite = capacity - (head - tail).
 // ═══════════════════════════════════════════════════════
 
-PCMRingBuffer::PCMRingBuffer(int capacity)
-    : m_buf(capacity, 0), m_capacity(capacity)
-{}
+int PCMRingBuffer::roundUpPow2(int v)
+{
+    if (v < 2) return 2;
+    int p = 1;
+    while (p < v) p <<= 1;
+    return p;
+}
+
+PCMRingBuffer::PCMRingBuffer(int capacityBytes)
+{
+    m_capacity = roundUpPow2(std::max(2, capacityBytes));
+    m_mask     = m_capacity - 1;
+    m_buf.assign(m_capacity, 0);
+    m_head.store(0, std::memory_order_relaxed);
+    m_tail.store(0, std::memory_order_relaxed);
+}
+
+int PCMRingBuffer::availableRead() const
+{
+    const int head = m_head.load(std::memory_order_acquire);
+    const int tail = m_tail.load(std::memory_order_acquire);
+    return head - tail;
+}
+
+int PCMRingBuffer::availableWrite() const
+{
+    return m_capacity - availableRead();
+}
 
 int PCMRingBuffer::write(const char *data, int size)
 {
-    const int toWrite = std::min(size, m_capacity - m_count);
-    if (toWrite <= 0) return 0;
+    if (size <= 0) return 0;
+    const int head = m_head.load(std::memory_order_relaxed);
+    const int tail = m_tail.load(std::memory_order_acquire);
+    const int free = m_capacity - (head - tail);
+    const int toWrite = std::min(size, free);
+    if (toWrite <= 0) {
+        // Overflow : log throttle (1 toutes les 50 occurrences) pour
+        // ne pas spammer la console quand le sink est sature.
+        static thread_local int g_overflowCount = 0;
+        if ((g_overflowCount++ % 50) == 0)
+            hWarning(exoVoice) << "ringbuffer overflow -- tried" << size
+                               << "B, free=" << free << "B (drop)";
+        return 0;
+    }
 
-    const int firstPart = std::min(toWrite, m_capacity - m_writePos);
-    std::memcpy(&m_buf[m_writePos], data, firstPart);
+    const int wpos = head & m_mask;
+    const int firstPart = std::min(toWrite, m_capacity - wpos);
+    std::memcpy(&m_buf[wpos], data, firstPart);
     if (toWrite > firstPart)
         std::memcpy(&m_buf[0], data + firstPart, toWrite - firstPart);
 
-    m_writePos = (m_writePos + toWrite) % m_capacity;
-    m_count += toWrite;
+    // release : rend les ecritures memoire visibles AVANT la maj de head
+    m_head.store(head + toWrite, std::memory_order_release);
     return toWrite;
 }
 
 int PCMRingBuffer::read(char *data, int maxSize)
 {
-    const int toRead = std::min(maxSize, m_count);
+    if (maxSize <= 0) return 0;
+    const int tail = m_tail.load(std::memory_order_relaxed);
+    const int head = m_head.load(std::memory_order_acquire);
+    const int avail = head - tail;
+    const int toRead = std::min(maxSize, avail);
     if (toRead <= 0) return 0;
 
-    const int firstPart = std::min(toRead, m_capacity - m_readPos);
-    std::memcpy(data, &m_buf[m_readPos], firstPart);
+    const int rpos = tail & m_mask;
+    const int firstPart = std::min(toRead, m_capacity - rpos);
+    std::memcpy(data, &m_buf[rpos], firstPart);
     if (toRead > firstPart)
         std::memcpy(data + firstPart, &m_buf[0], toRead - firstPart);
 
-    m_readPos = (m_readPos + toRead) % m_capacity;
-    m_count -= toRead;
+    m_tail.store(tail + toRead, std::memory_order_release);
     return toRead;
 }
 
 void PCMRingBuffer::clear()
 {
-    m_readPos = 0;
-    m_writePos = 0;
-    m_count = 0;
+    // SPSC : un seul thread peut clear (main). On synchronise les indices.
+    const int head = m_head.load(std::memory_order_acquire);
+    m_tail.store(head, std::memory_order_release);
+}
+
+int PCMRingBuffer::pushSamples(const int16_t *samples, int count)
+{
+    if (count <= 0) return 0;
+    const int written = write(reinterpret_cast<const char *>(samples),
+                               count * static_cast<int>(sizeof(int16_t)));
+    return written / static_cast<int>(sizeof(int16_t));
+}
+
+int PCMRingBuffer::popBlock(int16_t *out, int count)
+{
+    if (count <= 0) return 0;
+    const int needBytes = count * static_cast<int>(sizeof(int16_t));
+    const int got = read(reinterpret_cast<char *>(out), needBytes);
+    const int gotSamples = got / static_cast<int>(sizeof(int16_t));
+    if (gotSamples < count) {
+        // Underflow : silence-fill (zero), garantit un bloc complet
+        // -> jamais de craquement par lecture partielle.
+        std::memset(out + gotSamples, 0,
+                    (count - gotSamples) * sizeof(int16_t));
+        static thread_local int g_underflowCount = 0;
+        if ((g_underflowCount++ % 50) == 0)
+            hWarning(exoVoice) << "ringbuffer underflow -- got" << gotSamples
+                               << "/" << count << "samples (silence-fill)";
+    }
+    return count;
+}
+
+void PCMRingBuffer::dropSamples(int count)
+{
+    if (count <= 0) return;
+    const int dropBytes = count * static_cast<int>(sizeof(int16_t));
+    const int tail = m_tail.load(std::memory_order_relaxed);
+    const int head = m_head.load(std::memory_order_acquire);
+    const int avail = head - tail;
+    const int actual = std::min(dropBytes, avail);
+    if (actual <= 0) return;
+    m_tail.store(tail + actual, std::memory_order_release);
 }
 
 void PCMRingBuffer::fadeOutTail(int fadeBytes)
 {
-    if (fadeBytes <= 0 || m_count == 0) return;
-    int actual = std::min(fadeBytes, m_count);
+    if (fadeBytes <= 0) return;
+    const int head = m_head.load(std::memory_order_acquire);
+    const int tail = m_tail.load(std::memory_order_acquire);
+    const int avail = head - tail;
+    if (avail == 0) return;
+
+    int actual = std::min(fadeBytes, avail);
     actual &= ~1;  // align to int16 sample boundary
     const int fadeSamples = actual / 2;
     if (fadeSamples == 0) return;
 
+    // Audit fix: race vs consumer (callback RtAudio).
+    // On modifie [head-actual, head) ; si tail est "proche" de cette zone,
+    // la callback peut lire pendant qu'on ecrit -> click final intermittent.
+    // On exige une marge de securite >= 2 callbacks WASAPI typiques (4096 B
+    // ~= 2x bufferFrames=960 stereo Int16) entre tail et le debut du fade.
+    constexpr int kFadeSafetyMarginBytes = 4096;
+    if (avail - actual < kFadeSafetyMarginBytes) {
+        // Le consumer va atteindre la zone du fade dans <2 callbacks ->
+        // skip le fade pour eviter la race. Le silence-fill du callback
+        // remplacera proprement la queue.
+        return;
+    }
+
     // Extract tail data into a linear temporary buffer
     std::vector<char> tmp(actual);
-    const int tailStart = (m_writePos - actual + m_capacity) % m_capacity;
+    const int tailStart = (head - actual) & m_mask;
     const int firstPart = std::min(actual, m_capacity - tailStart);
     std::memcpy(tmp.data(), &m_buf[tailStart], firstPart);
     if (actual > firstPart)
@@ -457,6 +603,23 @@ TTSManager::TTSManager(QObject *parent)
 {
     m_lastSpeechEnd.start();
 
+    // Audio profiling : ON par defaut pour diagnostiquer les craquements,
+    // log toutes les 2 secondes + immediatement sur anomalie. Desactivable
+    // via setAudioProfilingEnabled(false) depuis QML.
+    m_audioProfiler.setEnabled(true);
+    m_audioProfiler.setLogIntervalMs(2000);
+
+    // Detection automatique des anomalies audio (Phase 9). Mode debug ON par
+    // defaut : log immediat sur underflow/overflow/jitter/burst/gap/silence/
+    // saturation/block-mismatch + resume periodique toutes les 2s.
+    m_audioAnomalies.setEnabled(m_enableAudioAnomalyDetection);
+    m_audioAnomalies.setLogIntervalMs(2000);
+
+    // Auto-correction (Phase 10) : ON par defaut, depend du detector + ring.
+    m_audioAutoCorrector.attach(&m_ringBuffer, &m_audioAnomalies);
+    m_audioAutoCorrector.setEnabled(m_enableAudioAutoCorrection);
+    m_audioAutoCorrector.setVerbose(true);
+
     // Keep TTS voice list fresh across backend restarts without requiring
     // a Settings page reopen.
     m_voiceRefreshTimer = new QTimer(this);
@@ -476,6 +639,16 @@ TTSManager::~TTSManager()
     // Signal worker to exit blocking loops (atomic flag — thread-safe)
     if (m_worker)
         m_worker->requestStop();
+
+    // R2 audit threads : avant quit(), forcer la fermeture du WebSocket Python
+    // depuis le thread du worker (sans cela, une lecture WS pendante peut
+    // bloquer 5s puis déclencher terminate() — qui peut corrompre Qt).
+    if (m_worker) {
+        QMetaObject::invokeMethod(m_worker, [w = m_worker]() {
+            w->resetPythonConnection();
+        }, Qt::QueuedConnection);
+    }
+
     m_workerThread.quit();
     if (!m_workerThread.wait(5000)) {
         hWarning(exoVoice) << "Thread TTS ne répond pas — terminate forcé";
@@ -521,7 +694,7 @@ void TTSManager::initTTS(const QString &pythonWsUrl)
             m_worker, &TTSWorker::cancelCurrent, Qt::QueuedConnection);
 
     m_workerThread.setObjectName("EXO-TTS");
-    m_workerThread.start();
+    m_workerThread.start(QThread::HighPriority);
 
     m_cascadeEnabled = !pythonWsUrl.isEmpty();
     hVoice() << "TTSManager initialisé — thread TTS démarré";
@@ -606,8 +779,10 @@ ProsodyProfile TTSManager::analyzeProsody(const QString &text) const
     // Detect sentence type
     bool isQuestion    = text.endsWith('?');
     bool isExclamation = text.endsWith('!');
-    int  wordCount     = text.split(QRegularExpression("\\s+"),
-                                    Qt::SkipEmptyParts).count();
+    // Perf: regex pré-compilée une seule fois (évite re-compile à chaque
+    // synthèse — analyzeProsody est appelée par TTSWorker pour chaque request).
+    static const QRegularExpression RX_WHITESPACE(QStringLiteral("\\s+"));
+    int  wordCount     = text.split(RX_WHITESPACE, Qt::SkipEmptyParts).count();
     bool isShort       = (wordCount <= 5);
     bool isLong        = (wordCount > 30);
 
@@ -812,6 +987,8 @@ void TTSManager::processQueue()
         // v27: reset anti-jitter counters for new audio stream
         m_pumpEpochNs = m_pumpClock.nsecsElapsed();
         m_pumpBytesSent = 0;
+        // Reset etat du resampler streaming pour repartir propre.
+        resetResamplerState();
     }
     // Chained phrases: no reset at all — EQ/compressor envelope stays continuous
 
@@ -875,12 +1052,48 @@ void TTSManager::onWorkerChunk(const QByteArray &pcm)
     QByteArray outputPcm = adaptForOutputFormat(processed);
     m_totalPcmBytes += outputPcm.size();
 
+    // DEBUG CRAQUEMENTS : dump du PCM apres resample/upmix EXO, juste avant
+    // d'etre injecte dans le ring -> active uniquement si EXO_TTS_DUMP=1.
+    // Audit: laisser actif en permanence faisait des I/O sync sur chaque
+    // chunk WS (40 ms) -> micro-jitter sur le slot principal.
+    {
+        static const bool s_dumpEnabled = qEnvironmentVariableIntValue("EXO_TTS_DUMP") == 1;
+        if (s_dumpEnabled) {
+            static QFile dbg("D:/EXO/logs/tts_post_adapt.pcm");
+            if (!dbg.isOpen()) dbg.open(QIODevice::WriteOnly | QIODevice::Truncate);
+            if (dbg.isOpen()) { dbg.write(outputPcm); dbg.flush(); }
+        }
+    }
+
     // Write to ring buffer — persistent sink reads from it continuously
     feedRingBuffer(outputPcm);
 
-    // Ensure pump timer is running (may have been stopped after previous idle)
-    if (m_sink && m_pumpTimer && !m_pumpTimer->isActive())
-        m_pumpTimer->start();
+    // FIX CRAQUEMENTS : pre-buffer 200 ms avant de demarrer le pump.
+    // Sans pre-buffer, le ring se vide entre chaque chunk WS (40 ms +
+    // jitter reseau) -> sink en famine continue -> glitch audio. Avec
+    // 200 ms d'avance le ring absorbe la jitter du producer et le sink
+    // a toujours de quoi jouer.
+    if (m_sink && m_pumpTimer && !m_pumpTimer->isActive() && !m_useRtAudioSink) {
+        const int bps = outputBytesPerSecond();
+        const int prebufBytes = bps * 400 / 1000;
+        if (m_ringBuffer.availableRead() >= prebufBytes) {
+            m_pumpTimer->start();
+            // Reset epoch pour eviter une bouffee de rattrapage massive
+            // au demarrage (idealPos calcule a partir d'un nowNs faux).
+            m_pumpEpochNs = m_pumpClock.nsecsElapsed();
+            m_pumpBytesSent = 0;
+            hVoice() << "[Audio] pump start apres prebuffer"
+                     << m_ringBuffer.availableRead() << "bytes ("
+                     << (m_ringBuffer.availableRead() * 1000 / bps) << "ms)";
+        }
+    }
+#ifdef ENABLE_RTAUDIO
+    // Demarrage differe du stream RtAudio APRES prebuffer 400 ms.
+    // (Backup au cas où le staging serait court-circuité.)
+    if (m_useRtAudioSink && m_rtSink && !m_rtSink->isRunning() && !m_rtNeedsPrebuf) {
+        m_rtSink->start();
+    }
+#endif
 
     broadcastWaveform(processed);
     emit ttsChunk(outputPcm);
@@ -917,6 +1130,14 @@ void TTSManager::onWorkerFinished()
     hVoice() << "onWorkerFinished — ringbuffer:" << m_ringBuffer.availableRead()
              << "bytes, totalPcm:" << m_totalPcmBytes;
 
+#ifdef ENABLE_RTAUDIO
+    // Synthese terminee : si on est encore en mode prebuffer (phrase courte
+    // < seuil), flush immediatement pour eviter de bloquer la lecture.
+    if (m_useRtAudioSink && m_rtNeedsPrebuf) {
+        flushRtPrebuffer("worker finished");
+    }
+#endif
+
     // Apply fade-out to tail of ring buffer to prevent end-of-speech click
     const int fadeBytes = SAMPLE_RATE * 10 / 1000 * static_cast<int>(sizeof(int16_t)); // 10ms
     m_ringBuffer.fadeOutTail(fadeBytes);
@@ -937,6 +1158,23 @@ void TTSManager::onWorkerFinished()
     } else {
         // No more phrases — pumpBuffer will detect empty ring buffer and finalize
         hVoice() << "TTS dernière phrase — attente vidage ring buffer";
+#ifdef ENABLE_RTAUDIO
+        // En mode RtAudio, pumpBuffer ne tourne pas : on poll manuellement
+        // le vidage du ring buffer pour declencher finalizeSpeech.
+        if (m_useRtAudioSink) {
+            QTimer *drainTimer = new QTimer(this);
+            drainTimer->setInterval(50);
+            connect(drainTimer, &QTimer::timeout, this, [this, drainTimer]() {
+                if (!m_speaking) { drainTimer->stop(); drainTimer->deleteLater(); return; }
+                if (m_synthesizing) return; // chunks encore en route
+                if (m_ringBuffer.availableRead() > 0) return; // pas encore vide
+                drainTimer->stop();
+                drainTimer->deleteLater();
+                finalizeSpeech();
+            });
+            drainTimer->start();
+        }
+#endif
     }
 }
 
@@ -982,27 +1220,67 @@ void TTSManager::ensureSinkReady()
         return;
     }
 
-    m_deviceFormat = m_sinkFormat;
-    if (!dev.isFormatSupported(m_deviceFormat)) {
-        const QAudioFormat preferred = dev.preferredFormat();
-        if (preferred.sampleFormat() == QAudioFormat::Int16) {
-            m_deviceFormat = preferred;
-            hWarning(exoVoice) << "Format TTS natif non supporté — fallback device format:"
-                               << m_deviceFormat.sampleRate() << "Hz"
-                               << m_deviceFormat.channelCount() << "ch Int16";
-        } else {
-            hWarning(exoVoice) << "Format TTS natif non supporté et preferred format non-Int16 — tentative avec format natif";
+    // ── FIX CRAQUEMENTS WASAPI ──
+    // dev.isFormatSupported(24kHz mono) ment souvent en mode SHARED : Qt
+    // accepte le format mais Windows applique un resample 24->48 +
+    // mono->stereo dans le mixer partage avec un algo de tres mauvaise
+    // qualite -> craquements audibles permanents.
+    //
+    // Solution : on vise EXPLICITEMENT le format reel du mixer Windows
+    // (typiquement 48 kHz stereo Int16, ce que Realtek/HDMI/USB exposent
+    // tous en partage). Notre resampler streaming + upmix mono->stereo
+    // fait le boulot proprement avant que Qt ne touche au sink, donc
+    // Windows ne resample plus rien.
+    auto matchInt16 = [&](int rate, int ch) -> QAudioFormat {
+        QAudioFormat f;
+        f.setSampleRate(rate);
+        f.setChannelCount(ch);
+        f.setSampleFormat(QAudioFormat::Int16);
+        return f;
+    };
+    QAudioFormat target;
+    bool targetOk = false;
+    for (int rate : {48000, 44100, 96000, 192000}) {
+        for (int ch : {2, 1}) {
+            QAudioFormat f = matchInt16(rate, ch);
+            if (dev.isFormatSupported(f)) { target = f; targetOk = true; break; }
         }
+        if (targetOk) break;
+    }
+    if (targetOk) {
+        m_deviceFormat = target;
+        if (m_deviceFormat.sampleRate()   != m_sinkFormat.sampleRate() ||
+            m_deviceFormat.channelCount() != m_sinkFormat.channelCount()) {
+            hVoice() << "Format mixer Windows force ->"
+                     << m_deviceFormat.sampleRate() << "Hz"
+                     << m_deviceFormat.channelCount() << "ch Int16"
+                     << "(resample/upmix interne EXO, ZERO resample WASAPI)";
+        } else {
+            hVoice() << "Format mixer Windows == format TTS natif (24kHz mono Int16)"
+                     << "-- ZERO resample necessaire";
+        }
+    } else {
+        hWarning(exoVoice) << "Aucun format Int16 supporte trouve -- fallback format TTS natif";
     }
 
-    hVoice() << "sink_started — device:" << dev.description()
+    hVoice() << "sink_started -- device:" << dev.description()
              << "format:" << m_deviceFormat.sampleRate() << "Hz"
              << m_deviceFormat.channelCount() << "ch Int16 (PERSISTENT)";
 
     m_sink = std::make_unique<QAudioSink>(dev, m_deviceFormat);
     m_sink->setVolume(1.0f);
-    // Lower sink buffer to reduce output latency while preserving underrun margin.
-    m_sink->setBufferSize(SINK_BUFFER_SIZE);
+    // Buffer sink dimensionne en bytes/sec REELS du device : ~160 ms
+    // = 4 chunks WS de 40 ms. Marge confortable contre la jitter du pump
+    // sans empiler de retard a la reprise.
+    const int devBps = std::max(1, m_deviceFormat.sampleRate()
+                                    * m_deviceFormat.channelCount()
+                                    * std::max(1, m_deviceFormat.bytesPerSample()));
+    // Buffer sink par DEFAUT Qt (pas de setBufferSize) -- Qt choisit la taille
+    // adaptee au backend WASAPI (typiquement 50-100 ms). Forcer plus grand
+    // peut causer des artefacts de segmentation cote backend.
+    // const int sinkBufBytes = std::max(SINK_BUFFER_SIZE, devBps * 500 / 1000);
+    // m_sink->setBufferSize(sinkBufBytes);
+    (void)devBps;
     connect(m_sink.get(), &QAudioSink::stateChanged,
             this, &TTSManager::onSinkStateChanged);
     m_sinkIO = m_sink->start();
@@ -1018,11 +1296,67 @@ void TTSManager::ensureSinkReady()
     if (!m_pumpTimer) {
         m_pumpTimer = new QTimer(this);
         m_pumpTimer->setInterval(PUMP_INTERVAL_MS); // v27: 5ms pump cycle (anti-jitter)
+        // FIX CRAQUEMENTS : sans PreciseTimer, Qt utilise un CoarseTimer
+        // (granularite 15-40 ms sur Windows) -> le pump est en realite
+        // appele toutes les ~40 ms et n'arrive pas a alimenter le sink
+        // assez vite -> famine continue cote WASAPI -> craquements.
+        m_pumpTimer->setTimerType(Qt::PreciseTimer);
         connect(m_pumpTimer, &QTimer::timeout, this, &TTSManager::pumpBuffer);
     }
 
-    hVoice() << "QAudioSink persistant démarré — bufferSize:" << m_sink->bufferSize()
-             << "(target" << SINK_BUFFER_SIZE << ")";
+    // Pre-allocated pump staging buffer dimensionne sur le DEVICE (et non sur
+    // le sink format) : a 48 kHz stereo Int16 le debit est 4x plus eleve qu'a
+    // 24 kHz mono. On vise >= max budget du pump (60 ms) avec marge.
+    const int wantBuf = std::max(PUMP_BUF_SIZE, devBps * 250 / 1000);
+    if (static_cast<int>(m_pumpBuf.size()) < wantBuf)
+        m_pumpBuf.resize(wantBuf);
+
+    hVoice() << "QAudioSink persistant demarre -- bufferSize:" << m_sink->bufferSize()
+             << "pumpBuf:" << m_pumpBuf.size() << "B"
+             << "devBps:" << devBps;
+    // Nouveau sink/format -> repart propre cote resampler.
+    resetResamplerState();
+
+#ifdef ENABLE_RTAUDIO
+    // ── BYPASS QAudioSink : RtAudio/WASAPI direct ──
+    // QAudioSink Qt6 + WASAPI shared cause des craquements meme avec un
+    // PCM bit-perfect en entree. RtAudio ouvre WASAPI directement avec son
+    // propre thread audio dedie -> immune au jitter de la Qt event loop.
+    // Le callback RtAudio lit le ring SPSC ; le pump+QAudioSink
+    // restent en place comme fallback mais le timer ne tourne pas.
+    if (m_rtSink && m_rtSink->isOpen()) {
+        // Sink RtAudio deja ouvert (sink persistant) -> ne pas re-ouvrir
+        // un 2e stream (sinon conflit WASAPI = pitch instable + craquements).
+        m_useRtAudioSink = true;
+        if (m_sink) m_sink->suspend();
+        return;
+    }
+    if (!m_rtSink) m_rtSink = std::make_unique<TTSAudioSinkRtAudio>();
+    // 1920 frames @ 48 kHz = 40 ms par callback. WASAPI shared mode Realtek
+    // tient mieux 40 ms que 20 ms : un wakeup OS rate (sched, GC, autre
+    // process) ne provoque plus immediatement un underflow car on a 40 ms
+    // de marge entre 2 callbacks au lieu de 20 ms. Trade-off : +20 ms de
+    // latence audio device, negligeable face au prebuffer 1100 ms.
+    const std::string devNameSubstr = m_outputDevicePreference.trimmed().isEmpty()
+        ? std::string()
+        : m_outputDevicePreference.trimmed().toStdString();
+    if (m_rtSink->open(m_deviceFormat.sampleRate(),
+                       m_deviceFormat.channelCount(),
+                       &m_ringBuffer,
+                       1920,
+                       devNameSubstr)) {
+        m_useRtAudioSink = true;
+        // QAudioSink reste cree mais ne sera pas alimente. On le passe en
+        // pause pour qu'il ne consomme pas de CPU (et n'emette pas de
+        // requetes de donnees parasites).
+        if (m_sink) m_sink->suspend();
+        hVoice() << "[Audio] RtAudio sink OUVERT (start differe apres prebuffer) -- QAudioSink desactive";
+    } else {
+        hWarning(exoVoice) << "[Audio] RtAudio sink echec -> fallback QAudioSink+pump";
+        m_rtSink.reset();
+        m_useRtAudioSink = false;
+    }
+#endif
 }
 
 int TTSManager::outputBytesPerSecond() const
@@ -1033,7 +1367,7 @@ int TTSManager::outputBytesPerSecond() const
     return std::max(1, rate * channels * bytesPerSample);
 }
 
-QByteArray TTSManager::adaptForOutputFormat(const QByteArray &pcm) const
+QByteArray TTSManager::adaptForOutputFormat(const QByteArray &pcm)
 {
     if (pcm.isEmpty())
         return pcm;
@@ -1054,19 +1388,81 @@ QByteArray TTSManager::adaptForOutputFormat(const QByteArray &pcm) const
     if (inputFrames <= 0)
         return pcm;
 
-    const double ratio = static_cast<double>(outRate) / static_cast<double>(inRate);
-    const int outputFrames = std::max(1, static_cast<int>(std::round(inputFrames * ratio)));
-    QByteArray converted(outputFrames * outChannels * static_cast<int>(sizeof(int16_t)), Qt::Uninitialized);
-    int16_t *output = reinterpret_cast<int16_t *>(converted.data());
-
-    for (int outFrame = 0; outFrame < outputFrames; ++outFrame) {
-        const int inFrame = std::min(inputFrames - 1, static_cast<int>(outFrame / ratio));
-        const int16_t sample = input[inFrame * inChannels];
-        for (int channel = 0; channel < outChannels; ++channel)
-            output[outFrame * outChannels + channel] = sample;
+    // Cas pas de resample (rates egaux) mais up/down-mix canaux : duplication simple
+    if (inRate == outRate) {
+        QByteArray converted(inputFrames * outChannels * static_cast<int>(sizeof(int16_t)),
+                             Qt::Uninitialized);
+        int16_t *output = reinterpret_cast<int16_t *>(converted.data());
+        for (int f = 0; f < inputFrames; ++f) {
+            const int16_t s = input[f * inChannels];
+            for (int c = 0; c < outChannels; ++c)
+                output[f * outChannels + c] = s;
+        }
+        return converted;
     }
 
+    const double ratio = static_cast<double>(outRate) / static_cast<double>(inRate);
+
+    // ── Linear interpolation resample STREAMING ──
+    // Etat persistant entre chunks (m_resampleSrcPos, m_resampleLastSample) :
+    // - srcPos accumule sa fraction d'un chunk au suivant -> pas de drift et
+    //   pas de "reset" toutes les 40 ms.
+    // - lastSample fournit l'echantillon "i = -1" au debut d'un chunk pour
+    //   interpoler proprement entre la fin du chunk precedent et le debut du
+    //   chunk courant -> elimine le clic periodique a la frontiere.
+    // Sortie : nombre de frames produits tant que srcPos < inputFrames.
+    // Premier chunk : on amorce lastSample avec input[0] pour eviter un saut
+    // depuis 0 vers le premier sample.
+    if (!m_resampleHasHistory) {
+        m_resampleLastSample = input[0];
+        m_resampleSrcPos = 0.0;
+        m_resampleHasHistory = true;
+    }
+
+    // Reserve approximative ; on retaillera apres.
+    const int approxOut = std::max(1, static_cast<int>(std::ceil(
+        (static_cast<double>(inputFrames) - m_resampleSrcPos) * ratio)) + 2);
+    QByteArray converted(approxOut * outChannels * static_cast<int>(sizeof(int16_t)),
+                         Qt::Uninitialized);
+    int16_t *output = reinterpret_cast<int16_t *>(converted.data());
+
+    int outFrame = 0;
+    double srcPos = m_resampleSrcPos;
+    while (srcPos < static_cast<double>(inputFrames)) {
+        const int i0 = static_cast<int>(std::floor(srcPos));
+        const int i1 = i0 + 1;
+        const double frac = srcPos - static_cast<double>(i0);
+        // i0 == -1 : premier sample d'un chunk dont la position fractionnaire
+        // pointe AVANT input[0]. On utilise le dernier sample du chunk precedent.
+        const int s0 = (i0 < 0)
+            ? static_cast<int>(m_resampleLastSample)
+            : static_cast<int>(input[i0 * inChannels]);
+        const int s1 = (i1 < inputFrames)
+            ? static_cast<int>(input[i1 * inChannels])
+            : static_cast<int>(input[(inputFrames - 1) * inChannels]);
+        const int interp = static_cast<int>(s0 + (s1 - s0) * frac);
+        const int16_t sample = static_cast<int16_t>(std::clamp(interp, -32768, 32767));
+        for (int c = 0; c < outChannels; ++c)
+            output[outFrame * outChannels + c] = sample;
+        ++outFrame;
+        srcPos += 1.0 / ratio;
+        if (outFrame >= approxOut) break; // garde-fou ; ne doit pas arriver
+    }
+
+    // Maj etat : on retranche inputFrames pour repartir relatif au prochain chunk.
+    m_resampleSrcPos = srcPos - static_cast<double>(inputFrames);
+    m_resampleLastSample = input[(inputFrames - 1) * inChannels];
+
+    // Truncate au nombre exact de frames produits.
+    converted.resize(outFrame * outChannels * static_cast<int>(sizeof(int16_t)));
     return converted;
+}
+
+void TTSManager::resetResamplerState()
+{
+    m_resampleSrcPos = 0.0;
+    m_resampleLastSample = 0;
+    m_resampleHasHistory = false;
 }
 
 void TTSManager::setOutputDevicePreference(const QString &deviceName)
@@ -1082,9 +1478,89 @@ void TTSManager::setOutputDevicePreference(const QString &deviceName)
     }
 }
 
+#ifdef ENABLE_RTAUDIO
+void TTSManager::flushRtPrebuffer(const char *reason)
+{
+    if (!m_useRtAudioSink || !m_rtNeedsPrebuf) return;
+    const int bps = std::max(1, outputBytesPerSecond());
+
+    // ── Warmup WASAPI : sur le tout 1er flush de la session, prepend
+    // ~200 ms de silence dans le ring AVANT l'audio utile. En mode shared
+    // mode WASAPI met 50-200 ms a acheminer les premieres frames au DAC,
+    // ces frames seraient perdues -> 1re syllabe coupee. On encaisse le
+    // warmup sur du silence inaudible. Une seule fois par session : entre
+    // les phrases suivantes le sink reste warm (driver cache).
+    if (!m_sinkWarmedUp) {
+        constexpr int kWarmupMs = 200;
+        const int warmupBytes = (bps * kWarmupMs) / 1000;
+        // Aligne sur frame size (2 bytes/sample mono)
+        const int alignedBytes = warmupBytes - (warmupBytes % 2);
+        if (alignedBytes > 0) {
+            const int written = m_ringBuffer.write(QByteArray(alignedBytes, 0).constData(), alignedBytes);
+            hVoice() << "[Audio] RtAudio WASAPI warmup pad" << written
+                     << "bytes (" << (written * 1000 / bps) << "ms) -- 1re session";
+        }
+        m_sinkWarmedUp = true;
+    }
+
+    const int stagedBytes = m_rtPrebufStage.size();
+    if (stagedBytes > 0) {
+        const int written = m_ringBuffer.write(m_rtPrebufStage.constData(), stagedBytes);
+        if (written < stagedBytes) {
+            hWarning(exoVoice) << "ringbuffer_write OVERFLOW (prebuf flush) -- lost"
+                               << (stagedBytes - written) << "bytes";
+        }
+        // AUDIT LATENCE 2026-05-03 : log enrichi -- temps depuis speak() pour
+        // mesurer la latence reelle premier-son (= cible utilisateur).
+        const qint64 sinceSpeak = m_speakRequestTime.isValid() ? m_speakRequestTime.elapsed() : -1;
+        hVoice() << "[Latency] RtAudio prebuf flush" << stagedBytes
+                 << "bytes (" << (stagedBytes * 1000 / bps) << "ms staged) reason:" << reason
+                 << "-- since speak():" << sinceSpeak << "ms";
+    } else {
+        hVoice() << "[Latency] RtAudio prebuf flush 0 bytes (empty) reason:" << reason;
+    }
+    m_rtPrebufStage.clear();
+    m_rtNeedsPrebuf = false;
+    if (m_rtSink && !m_rtSink->isRunning()) {
+        m_rtSink->start();
+    }
+}
+#endif
+
 void TTSManager::feedRingBuffer(const QByteArray &pcm)
 {
     if (pcm.isEmpty()) return;
+
+#ifdef ENABLE_RTAUDIO
+    // Staging anti-craquements pour RtAudio : accumuler ~1100 ms avant de
+    // flush + demarrer. Orpheus a un RTF total ~1.23 mais une fois la
+    // marge de demarrage consommee, le steady-state est ~1.13 par chunk
+    // (pauses KV cache / GC llama.cpp). 1100 ms de coussin absorbe les
+    // pics jusqu'a ~700 ms, ce qui couvre les phrases longues (>10 s) sans
+    // craquements, au prix de +350 ms de latence vs 750 ms.
+    if (m_useRtAudioSink && m_rtNeedsPrebuf) {
+        m_rtPrebufStage.append(pcm);
+        const int bps = outputBytesPerSecond();
+        // Orpheus RTF mesure ~1.22 sur phrases >5s (genere a 0.82x realtime).
+        // Le ring se vide donc ~180 ms par seconde de speech : un prebuf de
+        // 1800 ms couvre ~10 s de phrase sans craquements (cas typique).
+        // Au-dela, des micro-coupures resteront possibles sauf a accelerer
+        // le moteur (rate plus eleve, GGUF Q4, n_threads++, draft model).
+        // AUDIT LATENCE 2026-05-03 : prebuf configurable via EXO_TTS_PREBUF_MS
+        // (defaut conserve a 1800 ms pour zero regression). Reduire a 600 ms
+        // gagne ~1200 ms sur la latence percue mais peut reintroduire des
+        // craquements sur phrases longues si Orpheus jitter > 400 ms.
+        static const int s_prebufMs = []() {
+            const int v = qEnvironmentVariableIntValue("EXO_TTS_PREBUF_MS");
+            return (v >= 100 && v <= 5000) ? v : 1800;
+        }();
+        const int prebufBytes = bps * s_prebufMs / 1000;
+        if (m_rtPrebufStage.size() >= prebufBytes) {
+            flushRtPrebuffer("prebuf threshold");
+        }
+        return;
+    }
+#endif
 
     const int written = m_ringBuffer.write(pcm.constData(), pcm.size());
     if (written < pcm.size()) {
@@ -1103,23 +1579,60 @@ void TTSManager::pumpBuffer()
     if (!m_ringBuffer.isEmpty()) {
         // ── Anti-jitter: time-proportional writes (v27) ──
         const int bytesPerSec = outputBytesPerSecond();
+        const int frameBytes = std::max(1,
+            m_deviceFormat.channelCount() * static_cast<int>(sizeof(int16_t)));
         const qint64 nowNs = m_pumpClock.nsecsElapsed();
         const qint64 idealPos = (m_pumpEpochNs > 0)
             ? (nowNs - m_pumpEpochNs) * bytesPerSec / 1000000000LL
             : m_pumpBytesSent + static_cast<qint64>(m_pumpBuf.size());
         int budget = static_cast<int>(idealPos - m_pumpBytesSent);
-        // Clamp: min 2ms worth, max 20ms worth (prevents burst on catch-up)
-        budget = std::clamp(budget, bytesPerSec * 2 / 1000, bytesPerSec * 20 / 1000);
-        budget &= ~1; // align to 16-bit sample boundary
+        // Clamp: min 2ms, max 60ms. Le max 20ms historique etait trop bas
+        // pour absorber un jitter de timer de 40 ms (granularite Coarse
+        // Windows) -> on n'ecrivait que 50% du debit -> famine WASAPI ->
+        // craquement. 60ms reste largement sous le bufferSize sink (160ms).
+        budget = std::clamp(budget, bytesPerSec * 2 / 1000, bytesPerSec * 200 / 1000);
+        // Aligne sur la FRAME (channels * Int16) et non sur 1 sample Int16.
+        // Sinon, en stereo, ecrire un nombre impair de samples decale L/R
+        // de facon permanente -> craquement continu audible.
+        budget -= budget % frameBytes;
 
-        const int toRead = std::min({static_cast<int>(canWrite),
+        int toRead = std::min({static_cast<int>(canWrite),
                                      m_ringBuffer.availableRead(),
                                      static_cast<int>(m_pumpBuf.size()),
                                      budget});
+        // Garde-fou : alignement frame (channels*Int16). canWrite/availableRead
+        // peuvent ne pas etre alignes selon le backend Qt.
+        toRead -= toRead % frameBytes;
+        if (toRead <= 0) return;
         const int actual = m_ringBuffer.read(m_pumpBuf.data(), toRead);
-        if (actual > 0) {
-            m_sinkIO->write(m_pumpBuf.data(), actual);
-            m_pumpBytesSent += actual;
+        // Phase 10 : silence-fill si underflow (preserve cadence 40 ms vers QAudioSink)
+        const int writeBytes = m_audioAutoCorrector.onPop(
+            m_pumpBuf.data(), actual, toRead, m_ringBuffer.availableWrite());
+        if (writeBytes > 0) {
+            const auto wt0 = std::chrono::steady_clock::now();
+            m_sinkIO->write(m_pumpBuf.data(), writeBytes);
+            const auto wt1 = std::chrono::steady_clock::now();
+            m_pumpBytesSent += writeBytes;
+            // Profiler hooks (no-op si disabled)
+            const int popSamples = writeBytes / static_cast<int>(sizeof(int16_t));
+            const int64_t writeUs =
+                std::chrono::duration_cast<std::chrono::microseconds>(wt1 - wt0).count();
+            m_audioProfiler.onPop(popSamples, writeBytes);
+            m_audioProfiler.onAudioWrite(writeUs);
+            m_audioProfiler.setRingFreeBytes(m_ringBuffer.availableWrite());
+            m_audioProfiler.maybeFlush();
+            // Anomaly detector hooks (rapporte le pop reel cote ring)
+            m_audioAnomalies.onPop(actual / static_cast<int>(sizeof(int16_t)),
+                                   m_ringBuffer.availableWrite());
+            m_audioAnomalies.onBlockWritten(writeUs);
+            m_audioAnomalies.maybeFlush();
+            // Phase 10 : tracking derive + suggestion pacing
+            m_audioAutoCorrector.onBlockWritten(writeUs);
+            (void)m_audioAutoCorrector.suggestPacingAdjustmentUs();
+        } else {
+            // Pop sur ring vide alors que le pump avait du budget : underflow.
+            m_audioAnomalies.onPop(0, m_ringBuffer.availableWrite());
+            m_audioAnomalies.maybeFlush();
         }
         return;
     }
@@ -1158,6 +1671,13 @@ void TTSManager::pumpBuffer()
 void TTSManager::destroySink()
 {
     if (m_pumpTimer) m_pumpTimer->stop();
+#ifdef ENABLE_RTAUDIO
+    if (m_rtSink) {
+        m_rtSink->stop();
+        m_rtSink.reset();
+    }
+    m_useRtAudioSink = false;
+#endif
     m_ringBuffer.clear();
     if (m_sink) {
         m_sink->stop();
@@ -1200,7 +1720,38 @@ void TTSManager::finalizeSpeech()
     hVoice() << "[Latency] TTS total speech:" << m_speakRequestTime.elapsed() << "ms";
     LatencyMetrics::instance()->markResponseDone();
     LatencyMetrics::instance()->finalize();
-    hVoice() << "TTS terminé — sink persistant reste actif";
+#ifdef ENABLE_RTAUDIO
+    // Reset le mode staging pour la prochaine phrase + log underflows.
+    if (m_useRtAudioSink && m_rtSink) {
+        hVoice() << "[Audio] RtAudio stats -- underflows:" << m_rtSink->underflowCount()
+                 << "frames:" << m_rtSink->framesWritten();
+        // Stop le sink entre phrases : evite ~1700 underflows de silence-fill
+        // pendant les 30s du mode conversation. Le prochain flushRtPrebuffer
+        // redemarre via "if (m_rtSink && !m_rtSink->isRunning()) m_rtSink->start()".
+        // m_sinkWarmedUp reste true : pas de pad warmup au redemarrage (driver chaud).
+        //
+        // IMPORTANT : RETARDER le stop. Quand le ring devient vide, WASAPI a
+        // encore bufferFrames (40 ms) + latence shared mode (~30 ms) dans
+        // son tampon device qui n'ont pas encore ete envoyes au DAC. Si on
+        // appelle stopStream() immediatement, ces ~70-100 ms sont jetes :
+        // derniere syllabe coupee. On pousse 200 ms de silence dans le ring
+        // (synchrone) PUIS on stoppe : le DAC a le temps de drainer le tail.
+        if (m_rtSink->isRunning()) {
+            constexpr int kTailMs = 200;
+            const int bps = outputBytesPerSecond();
+            const int tailBytes = (bps * kTailMs) / 1000;
+            const int alignedTail = tailBytes - (tailBytes % 2);
+            if (alignedTail > 0) {
+                QByteArray silence(alignedTail, '\0');
+                m_ringBuffer.write(silence.constData(), alignedTail);
+            }
+            m_rtSink->stop();
+        }
+    }
+    m_rtPrebufStage.clear();
+    m_rtNeedsPrebuf = true;
+#endif
+    hVoice() << "TTS termin\u00e9 \u2014 sink stopp\u00e9 jusqu'\u00e0 prochaine phrase";
 }
 
 // ── tuning ───────────────────────────────────────────
@@ -1321,7 +1872,7 @@ void TTSManager::fetchAvailableVoices()
     });
 
     // Timeout: keep the connection open long enough to survive model loading
-    // (CosyVoice2-0.5B can take up to ~3 min on first cold start).
+    // (Orpheus 3B FR GGUF can take up to ~3 min on first cold start).
     QTimer::singleShot(300000, ws, [this, ws]() {
         if (ws->state() == QAbstractSocket::ConnectedState)
             ws->close();

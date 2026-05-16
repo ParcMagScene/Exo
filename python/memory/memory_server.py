@@ -1,4 +1,8 @@
-"""
+﻿"""
+
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+import os
+os.chdir("D:/EXO/")
 memory_server.py — EXO Mémoire v2 Server
 
 WebSocket server pour la mémoire sémantique EXO v2.
@@ -20,7 +24,10 @@ Port: 8771 (default)
 from __future__ import annotations
 
 import asyncio
-import json
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
 import logging
 import os
 import sys
@@ -32,23 +39,51 @@ from shared.base_service import init_v9, json_loads, json_dumps
 
 from memory.memory_manager import MemoryManager
 
+
+# --- Logging EXO centralisé (identique C++) ---
+def _get_exo_logfile():
+    # Correction : tous les logs doivent aller dans D:/EXO/logs/
+    project_root = Path(__file__).resolve().parent.parent.parent
+    log_dir = os.environ.get("EXO_LOGS_DIR", str(project_root / "logs"))
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    ts = os.environ.get("EXO_SESSION_TIMESTAMP")
+    if not ts:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(log_dir, f"exo_{ts}.log")
+
+logfile = _get_exo_logfile()
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [MEM] %(levelname)s %(message)s",
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("exo.memory")
+_file_handler = logging.FileHandler(logfile, encoding="utf-8", delay=False)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [MEM] %(levelname)s %(message)s", datefmt="%H:%M:%S"))
+_file_handler.flush = _file_handler.stream.flush
+logger.addHandler(_file_handler)
+logger.propagate = True
+
+# Log d'amorçage immédiat pour diagnostic (placé après l'ajout du handler)
+logger.info("=== EXO MEMORY_SERVER STARTUP ===")
+
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration defaults
 # ---------------------------------------------------------------------------
 
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 8771
-DEFAULT_MODEL = "all-MiniLM-L6-v2"
+DEFAULT_MODEL = os.environ.get(
+    "EXO_MEMORY_MODEL",
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+)
 DEFAULT_DATA_DIR = os.environ.get(
     "EXO_FAISS_DIR",
-    r"D:\EXO\faiss\semantic_memory",
+    "D:/EXO/faiss/semantic_memory",
 )
 
 
@@ -69,7 +104,10 @@ class MemorySession:
         tier_counts = {t: st["tiers"][t]["count"] for t in ("stm", "mtm", "ltm")}
         await ws.send(json.dumps({
             "type": "ready",
+            "service": "memory_server",
             "model": st["model"],
+            "device": "n/a",
+            "backend": "n/a",
             "memories": st["count"],
             "tiers": tier_counts,
         }))
@@ -102,14 +140,18 @@ class MemorySession:
                 text = msg.get("text")
                 if not text:
                     return
-                entry = self.manager.add(
-                    text=text,
-                    importance=msg.get("importance", 0.5),
-                    tags=msg.get("tags", []),
-                    category=msg.get("category", ""),
-                    source=msg.get("source", "user"),
-                    ttl_days=msg.get("ttl_days", 0.0),
-                    tier=msg.get("tier", "stm"),
+                loop = asyncio.get_running_loop()
+                entry = await loop.run_in_executor(
+                    None,
+                    lambda: self.manager.add(
+                        text=text,
+                        importance=msg.get("importance", 0.5),
+                        tags=msg.get("tags", []),
+                        category=msg.get("category", ""),
+                        source=msg.get("source", "user"),
+                        ttl_days=msg.get("ttl_days", 0.0),
+                        tier=msg.get("tier", "stm"),
+                    ),
                 )
                 if entry:
                     await ws.send(json.dumps({
@@ -128,10 +170,14 @@ class MemorySession:
                 query = msg.get("query")
                 if not query:
                     return
-                results = self.manager.search(
-                    query=query,
-                    top_k=msg.get("top_k", 5),
-                    tiers=msg.get("tiers"),
+                loop = asyncio.get_running_loop()
+                results = await loop.run_in_executor(
+                    None,
+                    lambda: self.manager.search(
+                        query=query,
+                        top_k=msg.get("top_k", 5),
+                        tiers=msg.get("tiers"),
+                    ),
                 )
                 await ws.send(json.dumps({
                     "type": "results",
@@ -143,7 +189,10 @@ class MemorySession:
                 entry_id = msg.get("id")
                 if not entry_id:
                     return
-                success = self.manager.remove(entry_id)
+                loop = asyncio.get_running_loop()
+                success = await loop.run_in_executor(
+                    None, self.manager.remove, entry_id
+                )
                 await ws.send(json.dumps({
                     "type": "removed",
                     "id": entry_id,
@@ -177,7 +226,10 @@ class MemorySession:
             # ── Consolidation ────────────────────────
 
             elif msg_type == "consolidate":
-                result = self.manager.consolidate()
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(
+                    None, self.manager.consolidate
+                )
                 await ws.send(json.dumps({
                     "type": "consolidated",
                     **result,
@@ -188,7 +240,10 @@ class MemorySession:
                 if not text:
                     await ws.send(json.dumps({"type": "error", "message": "Champ 'text' manquant"}))
                     return
-                summaries = self.manager.summarize_text(text)
+                loop = asyncio.get_running_loop()
+                summaries = await loop.run_in_executor(
+                    None, self.manager.summarize_text, text
+                )
                 await ws.send(json.dumps({
                     "type": "summary",
                     **summaries,
@@ -401,7 +456,7 @@ async def main() -> None:
     try:
         import websockets
     except ImportError:
-        logger.error("websockets not installed. Run: pip install websockets")
+        logger.error("websockets module not available")
         return
 
     server = await websockets.serve(
@@ -424,4 +479,10 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
+    except Exception:
+        logger.exception("Memory server fatal error")
+        sys.exit(1)

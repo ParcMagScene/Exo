@@ -1,0 +1,25 @@
+# STRUCTURE LOCK — NE PAS MODIFIER
+
+- docs/
+    - index.md
+    - CONTRIBUTING_DOCS.md
+    - .structure.lock
+    - architecture/
+    - implementation/
+    - troubleshooting/
+    - audits/
+        - audio/
+        - backend/
+        - gui/
+        - pipeline/
+        - services/
+
+Règles :
+- Aucun nouveau dossier ne doit être créé dans docs/.
+- Aucun dossier existant ne doit être renommé.
+- Aucun fichier documentaire ne doit être créé à la racine du projet.
+- Tous les audits doivent être classés dans docs/audits/<catégorie>/.
+- Tous les documents techniques dans docs/architecture/ ou docs/implementation/.
+- Tous les guides de résolution dans docs/troubleshooting/.
+- Toujours référencer les nouveaux documents dans docs/index.md.
+- Cette structure est définitive et verrouillée.

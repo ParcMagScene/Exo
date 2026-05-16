@@ -119,3 +119,7 @@ tts_server_streaming.log
 exo.egg-info/
 exo/
 Testing/
+
+# HuggingFace / model caches
+cache/
+

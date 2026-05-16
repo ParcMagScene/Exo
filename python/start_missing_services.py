@@ -41,7 +41,7 @@ SERVICE_REGISTRY: dict[str, dict] = {
 EXO_ENV = {
     "EXO_WHISPER_MODELS":   str(_EXO_ROOT / "models" / "whisper"),
     "EXO_WHISPERCPP_BIN":   str(_EXO_ROOT / "whispercpp" / "build_vk" / "bin" / "Release"),
-    "EXO_COSYVOICE_MODELS": str(_EXO_ROOT / "models" / "cosyvoice"),
+    "EXO_ORPHEUS_MODELS":   str(_EXO_ROOT / "models" / "orpheus_fr_gguf"),
     "EXO_FAISS_DIR":        str(_EXO_ROOT / "faiss" / "semantic_memory"),
     "EXO_WAKEWORD_MODELS":  str(_EXO_ROOT / "models" / "wakeword"),
     "HF_HOME":              str(_EXO_ROOT / "cache" / "huggingface"),

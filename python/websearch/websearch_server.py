@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 EXO v5.2 — WebSearch Server (WebSocket)
 Port 8773 — Recherche web via DuckDuckGo (aucune clé API requise)
@@ -8,8 +8,15 @@ Protocol WebSocket :
   ← JSON {"ok":true,"data":{"results":[{"title":"...","url":"...","snippet":"..."}],"query":"..."}}
 """
 
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+import os
+os.chdir("D:/EXO/")
+
 import asyncio
-import json
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
 import logging
 import sys
 import traceback
@@ -31,8 +38,32 @@ except ImportError:
 from shared.singleton_guard import ensure_single_instance
 from shared.base_service import init_v9
 
+
+# --- Logging EXO centralisé (identique C++) ---
+def _get_exo_logfile():
+    # Correction : tous les logs doivent aller dans D:/EXO/logs/
+    project_root = Path(__file__).resolve().parent.parent.parent
+    log_dir = os.environ.get("EXO_LOGS_DIR", str(project_root / "logs"))
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    ts = os.environ.get("EXO_SESSION_TIMESTAMP")
+    if not ts:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(log_dir, f"exo_{ts}.log")
+
+logfile = _get_exo_logfile()
+
+_file_handler = logging.FileHandler(logfile, encoding="utf-8", delay=False)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [WebSearch] %(message)s"))
+_file_handler.flush = _file_handler.stream.flush
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [WebSearch] %(message)s")
 log = logging.getLogger("websearch_server")
+log.addHandler(_file_handler)
+log.propagate = True
+log.info("=== EXO WEBSEARCH_SERVER STARTUP ===")
+_file_handler.flush()
 
 PORT = 8773
 MAX_RESULTS_LIMIT = 10

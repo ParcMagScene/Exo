@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-TRACE_DIR = Path("logs/traces")
+TRACE_DIR = Path("D:/EXO/logs/traces")
 
 
 class Span:

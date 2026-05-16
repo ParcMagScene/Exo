@@ -87,6 +87,10 @@ private:
     int  m_reconnectMaxAttempts = 0;  // 0 = unlimited
     bool m_reconnectExponential = false;
     int  m_reconnectAttempts  = 0;
+
+    // Audit P2.4 : heartbeat ping applicatif 30s (évite zombies WS)
+    QTimer *m_pingTimer = nullptr;
+    static constexpr int PING_INTERVAL_MS = 30000;
 };
 
 #endif // WEBSOCKETCLIENT_H

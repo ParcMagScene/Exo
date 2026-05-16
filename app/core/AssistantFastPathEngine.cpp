@@ -70,7 +70,15 @@ bool AssistantFastPathEngine::tryHandleMessage(const QString &message, QString *
                       || (low.contains(QLatin1String("température")) && low.contains(QLatin1String("dehors")))
                       || (low.contains(QLatin1String("fait")) && low.contains(QLatin1String("dehors")));
 
-        if (isWeather && m_weatherManager
+        // Si l'utilisateur cite explicitement une ville (à/de/pour/sur/en X),
+        // on laisse le LLM appeler get_weather(city=...) au lieu de servir
+        // la météo cachée pour la ville par défaut.
+        static const QRegularExpression reExplicitCity(
+            QStringLiteral("\\b(?:à|a|de|du|pour|sur|en|vers)\\s+([A-ZÀ-Ý][\\wÀ-ÿ'’\\-]{1,})"),
+            QRegularExpression::UseUnicodePropertiesOption);
+        const bool mentionsExplicitCity = isWeather && reExplicitCity.match(message).hasMatch();
+
+        if (isWeather && !mentionsExplicitCity && m_weatherManager
             && !m_weatherManager->description().isEmpty()) {
             QString city = m_configManager ? m_configManager->getWeatherCity()
                                            : QStringLiteral("ici");

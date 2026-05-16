@@ -209,7 +209,7 @@ class CPUGPUOrchestrator:
                     gpu_used_mb = torch.cuda.memory_allocated(0) / 1024 / 1024
                     gpu_total_mb = torch.cuda.get_device_properties(0).total_mem / 1024 / 1024
             except Exception:
-                pass
+                log.debug("GPU memory probe failed", exc_info=True)
 
         snap = ResourceSnapshot(
             timestamp=time.monotonic(),

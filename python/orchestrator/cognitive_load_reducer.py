@@ -62,7 +62,7 @@ class CognitiveLoadReducer:
                             "recommendation": f"Fusionner {count} couches de type '{lt}'",
                         })
             except Exception:
-                pass
+                log.debug("layer redundancy scan failed", exc_info=True)
 
         # Analyser les micro-agents pour trouver des doublons fonctionnels
         if self._micro:
@@ -86,7 +86,7 @@ class CognitiveLoadReducer:
                             ),
                         })
             except Exception:
-                pass
+                log.debug("micro-agent redundancy scan failed", exc_info=True)
 
         record = {
             "id": f"rr_{uuid.uuid4().hex[:8]}",

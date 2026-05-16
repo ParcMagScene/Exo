@@ -75,6 +75,8 @@ class AgentManager:
         This is the main entry point for agent processing.
         """
         start = time.time()
+        # AUDIT LATENCE 2026-05-03 : timer haute resolution dedie au profiling.
+        t_pipeline = time.monotonic()
         result: dict[str, Any] = {
             "input": text,
             "stages": {},
@@ -82,9 +84,10 @@ class AgentManager:
         }
 
         try:
-            # 1. THINKING — Parse intent via NLU
+            # 1. THINKING -- Parse intent via NLU
             self.state_machine.set_state(AgentState.THINKING)
             intent = await self._call_service("nlu", "parse_intent", {"text": text})
+            log.info("[Latency] process_intent: NLU done at %.0fms", (time.monotonic() - t_pipeline) * 1000.0)
             result["stages"]["intent"] = intent
             result["intent"] = intent
 
@@ -236,11 +239,14 @@ class AgentManager:
         if not port or not websockets:
             return None
 
+        # AUDIT LATENCE 2026-05-03 : profiling par appel (handshake + send + recv)
+        t0 = time.monotonic()
         try:
             async with websockets.connect(
                 f"ws://localhost:{port}",
                 ping_interval=None, ping_timeout=None,
             ) as ws:
+                t_conn = time.monotonic()
                 # Consume ready message
                 await asyncio.wait_for(ws.recv(), timeout=5.0)
 
@@ -251,6 +257,12 @@ class AgentManager:
                 await ws.send(json.dumps(payload))
                 raw = await asyncio.wait_for(ws.recv(), timeout=15.0)
                 response = json.loads(raw)
+                t_done = time.monotonic()
+                log.info(
+                    "[Latency] svc=%s action=%s connect=%.0fms total=%.0fms",
+                    name, action,
+                    (t_conn - t0) * 1000.0, (t_done - t0) * 1000.0,
+                )
 
                 if response.get("type") == "pong":
                     return {"pong": True}

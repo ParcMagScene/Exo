@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import "../theme"
-import "../components"
 
 // -------------------------------------------------------
 //  BottomBar � Barre inf�rieure EXO Design System
@@ -62,17 +61,7 @@ Rectangle {
 
     Component.onCompleted: Qt.callLater(refreshServiceStates)
 
-    function buildWeatherSummary() {
-        if (typeof weatherManager === 'undefined') return ""
-        var t = weatherManager.temperature || ""
-        var d = weatherManager.description || ""
-        var city = weatherManager.city || ""
-        if (city && t && d) return city + " � " + t + " � " + d
-        if (t && d) return t + " � " + d
-        return d || t || ""
-    }
-
-    // Bordure sup�rieure
+    // Bordure supérieure
     Rectangle {
         anchors.top: parent.top
         width: parent.width
@@ -86,52 +75,7 @@ Rectangle {
         anchors.rightMargin: Theme.spacing12
         spacing: Theme.spacing12
 
-        // -- Visualiseur audio --
-        ExoVisualizer {
-            Layout.preferredWidth: 120
-            Layout.fillHeight: true
-            audioLevel: bottomBar.audioLevel
-            active: bottomBar.audioLevel > 0.01
-            lineColor: Theme.accent
-            lineWidth: 1.0
-        }
-
-        // S�parateur
-        Rectangle {
-            Layout.fillHeight: true
-            Layout.topMargin: Theme.spacing6
-            Layout.bottomMargin: Theme.spacing6
-            width: 1
-            color: Theme.border
-        }
-
-        // -- M�t�o --
-        Text {
-            id: weatherText
-            text: bottomBar.buildWeatherSummary()
-            font.family: Theme.fontMono
-            font.pixelSize: Theme.fontMicro
-            color: Theme.textSecondary
-            elide: Text.ElideRight
-            Layout.fillWidth: true
-        }
-
-        Connections {
-            target: typeof weatherManager !== 'undefined' ? weatherManager : null
-            function onWeatherUpdated() { weatherText.text = bottomBar.buildWeatherSummary() }
-            function onCityChanged()    { weatherText.text = bottomBar.buildWeatherSummary() }
-        }
-
-        // S�parateur
-        Rectangle {
-            Layout.fillHeight: true
-            Layout.topMargin: Theme.spacing6
-            Layout.bottomMargin: Theme.spacing6
-            width: 1
-            color: Theme.border
-        }
-
-        // -- Health dots (cache serviceStates � pas de binding direct C++) --
+        // -- Health dots (cache serviceStates) --
         Row {
             spacing: Theme.spacing6
 
@@ -182,7 +126,10 @@ Rectangle {
             }
         }
 
-        // S�parateur
+        // Spacer - pousse l'horloge à droite
+        Item { Layout.fillWidth: true }
+
+        // Séparateur
         Rectangle {
             Layout.fillHeight: true
             Layout.topMargin: Theme.spacing6

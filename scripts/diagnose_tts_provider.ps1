@@ -1,17 +1,15 @@
 param(
     [string[]]$PythonCandidates = @(
-        "D:\EXO\project\.venv\Scripts\python.exe",
-        "D:\EXO\project\.venv_stt_tts\Scripts\python.exe",
-        "D:\EXO\venv\exo\Scripts\python.exe",
-        "D:\EXO\venv\stt_tts\Scripts\python.exe"
+        "D:\EXO\.venv\Scripts\python.exe",
+        "D:\EXO\.venv_stt_tts\Scripts\python.exe"
     ),
     [string[]]$LogCandidates = @(
         "D:\EXO\logs\tts_stderr.log",
         "D:\EXO\logs\tts_stderr.txt",
         "D:\EXO\logs\tts_server_stderr.log",
-        "D:\EXO\project\logs\tts_server.jsonl",
-        "D:\EXO\project\logs\exo_live_stdout.log",
-        "D:\EXO\project\logs\exo_live_stderr.log"
+        "D:\EXO\logs\tts_server.jsonl",
+        "D:\EXO\logs\exo_live_stdout.log",
+        "D:\EXO\logs\exo_live_stderr.log"
     )
 )
 

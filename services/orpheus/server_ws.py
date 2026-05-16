@@ -1,7 +1,32 @@
-"""Orpheus 3B FR (GGUF) -- serveur WebSocket compatible EXO TTS streaming.
+from __future__ import annotations
+def profile_block(label, threshold_ms=10):
+    import time
+    from functools import wraps
+    def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            @wraps(func)
+            async def wrapper(*args, **kwargs):
+                t0 = time.monotonic()
+                result = await func(*args, **kwargs)
+                dt = (time.monotonic() - t0) * 1000
+                if dt > threshold_ms:
+                    log.warning(f"[PERF] {label}: {dt:.1f} ms")
+                return result
+            return wrapper
+        else:
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                t0 = time.monotonic()
+                result = func(*args, **kwargs)
+                dt = (time.monotonic() - t0) * 1000
+                if dt > threshold_ms:
+                    log.warning(f"[PERF] {label}: {dt:.1f} ms")
+                return result
+            return wrapper
+    return decorator
+"""Orpheus 3B FR (GGUF) -- serveur WebSocket TTS EXO (streaming PCM16 24 kHz).
 
-Drop-in replacement pour python/tts/tts_server_streaming.py (CosyVoice2).
-Protocole WebSocket identique :
+Protocole WebSocket :
 
     -> JSON  {"type":"synthesize","text":"...","voice":"pierre","rate":1.0}
              {"type":"cancel"} | {"type":"ping"} | {"type":"list_voices"}
@@ -24,12 +49,13 @@ Variables d'environnement :
     ORPHEUS_WS_PORT         port (defaut: 8767)
     ORPHEUS_WS_CHUNK_BYTES  taille chunk WS PCM16 (defaut: 480)
 """
-from __future__ import annotations
-
 import argparse
 import asyncio
 import concurrent.futures
-import json
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
 import logging
 import os
 import sys
@@ -66,9 +92,49 @@ log = logging.getLogger("orpheus.ws")
 
 
 OUTPUT_BYTES_PER_SAMPLE = 2  # PCM16 mono
+CHANNELS = 1                 # mono obligatoire (Orpheus WS protocol)
+
+# Tailles de chunk WebSocket autorisees (samples mono @ 24 kHz)
+#   480 samples = 20 ms = 960 octets PCM16
+#   960 samples = 40 ms = 1920 octets PCM16
+# 40 ms est le sweet-spot : grand assez pour amortir la jitter du pump C++,
+# petit assez pour rester sub-perceptible en latence.
+ALLOWED_CHUNK_SAMPLES = (480, 960)
+DEFAULT_CHUNK_SAMPLES = 960
+DEFAULT_CHUNK_BYTES   = DEFAULT_CHUNK_SAMPLES * OUTPUT_BYTES_PER_SAMPLE  # 1920
+
+# v6.0 perf audit : silence pad pre-alloue (1 chunk max) pour eviter une
+# allocation `b"\x00" * pad` a chaque drain final de _stream_pcm.
+_SILENCE_PAD = bytes(max(ALLOWED_CHUNK_SAMPLES) * OUTPUT_BYTES_PER_SAMPLE)
+
+# ---------------------------------------------------------------------------
+# Phase de readiness globale (v5.1 supervisor)
+#   ready_loading : port ouvert, modèle pas encore chargé
+#   ready_warmup  : modèle chargé, warmup en cours
+#   ready_online  : pleinement opérationnel
+# ---------------------------------------------------------------------------
+READY_PHASE: str = "ready_loading"
+LOAD_DONE: "asyncio.Event | None" = None       # set quand passe à ready_online
+CONNECTED_CLIENTS: "set" = set()                # ws clients à notifier au switch
 
 
-# Alias des voix EXO/CosyVoice -> voix Orpheus reelles.
+def _normalize_chunk_bytes(raw: int) -> int:
+    """Force la taille de chunk a 960 ou 1920 octets (480 ou 960 samples).
+
+    Toute autre valeur est snappee sur la plus proche autorisee, avec un log.
+    """
+    samples = max(1, int(raw)) // OUTPUT_BYTES_PER_SAMPLE
+    if samples in ALLOWED_CHUNK_SAMPLES:
+        return samples * OUTPUT_BYTES_PER_SAMPLE
+    snapped = min(ALLOWED_CHUNK_SAMPLES, key=lambda s: abs(s - samples))
+    log.warning(
+        "chunk_bytes=%d (=%d samples) hors specs ; snap -> %d samples (%d B)",
+        raw, samples, snapped, snapped * OUTPUT_BYTES_PER_SAMPLE,
+    )
+    return snapped * OUTPUT_BYTES_PER_SAMPLE
+
+
+# Alias des voix EXO -> voix Orpheus reelles.
 # Toute voix inconnue retombe sur STATE.default_voice (cf _resolve_voice).
 VOICE_ALIASES = {
     "exo_default":   "pierre",
@@ -110,17 +176,33 @@ def _resolve_voice(voice: Optional[str]) -> str:
 # Conversion audio
 # ---------------------------------------------------------------------------
 def _float_to_pcm16(wave: np.ndarray) -> bytes:
-    if wave.size == 0:
+    """Convertit un buffer float -> PCM16 mono little-endian.
+
+    Garanties :
+      - dtype d'entree force en float32
+      - mono : si stereo (shape (N,2) ou (2,N)), on rabat sur le canal 0
+      - clip dur dans [-1,1] *avant* multiplication (evite tout overflow)
+      - pas de normalisation par segment (cause de craquements en streaming)
+      - sortie en int16 little-endian ("<i2") explicite, contigue
+    """
+    if wave is None or wave.size == 0:
         return b""
-    if wave.dtype not in (np.float32, np.float64):
-        wave = wave.astype(np.float32)
-    # IMPORTANT : NE PAS normaliser au peak du segment ! En streaming on
-    # appelle cette fonction par chunk de ~2048 samples : normaliser chaque
-    # segment a son propre peak introduit des sauts d'amplitude entre
-    # segments -> craquements/pops a chaque jonction de frame SNAC.
-    # On se contente d'un clip dur (les samples SNAC sont deja dans [-1,1]).
-    pcm = np.clip(wave * 32767.0, -32768.0, 32767.0).astype(np.int16)
-    return pcm.tobytes()
+    arr = np.asarray(wave)
+    # Mono
+    if arr.ndim > 1:
+        if arr.shape[0] in (1, 2):
+            arr = arr[0]
+        elif arr.shape[-1] in (1, 2):
+            arr = arr[..., 0]
+        else:
+            arr = arr.reshape(-1)
+    # Float32 contigu (writeable)
+    if arr.dtype != np.float32 or not arr.flags.writeable:
+        arr = arr.astype(np.float32, copy=True)
+    # Clip dans [-1,1] PUIS scale -> evite tout overflow int16
+    np.clip(arr, -1.0, 1.0, out=arr)
+    pcm = (arr * 32767.0).astype("<i2", copy=False)
+    return np.ascontiguousarray(pcm).tobytes()
 
 
 def _pcm_duration_seconds(pcm_bytes: int) -> float:
@@ -172,9 +254,7 @@ def _stream_pcm(
     last_decoded_count = 0
     first_done = False
     pcm_buf = bytearray()
-    target = chunk_bytes if chunk_bytes % 2 == 0 else chunk_bytes - 1
-    if target < 240:
-        target = 240
+    target = _normalize_chunk_bytes(chunk_bytes)
 
     speed_factor = float(speed) if abs(speed - 1.0) > 1e-3 else None
 
@@ -239,9 +319,42 @@ def _stream_pcm(
                 seg_np = seg.squeeze().detach().cpu().float().numpy()
                 yield from _emit(seg_np)
 
-    # Drain : tout ce qui reste dans pcm_buf
+    # Drain final : on PAD avec du silence pour emettre un dernier chunk
+    # exactement aligne sur `target` octets. Cela garantit cote client une
+    # taille constante sur tous les chunks (evite la mini-frame finale qui
+    # decalait le pump du ring buffer).
+    # AVANT le drain : decode des audio_ids restants apres la derniere fenetre
+    # complete (cause des mots coupes en fin : jusqu'a 6 ids ~75 ms perdus).
+    if first_done and len(audio_ids) > last_decoded_count and len(audio_ids) >= 28 and not cancel_flag.is_set():
+        extra = len(audio_ids) - last_decoded_count  # 1..6 ids non decodes
+        window = audio_ids[len(audio_ids) - 28 : len(audio_ids)]
+        ah = _decode_window(window)
+        if ah is not None:
+            # La fenetre precedente a emis [2048:4096]. Cette fenetre est
+            # decalee de `extra` ids vers la droite : ses samples [2048:4096]
+            # se chevauchent partiellement avec la precedente. On emet
+            # uniquement la portion *nouvelle* a la fin.
+            samples_per_id = (4096 - 2048) // 7  # ~293 samples par id
+            tail_samples = samples_per_id * extra
+            seg = ah[:, :, 4096 - tail_samples : 4096]
+            seg_np = seg.squeeze().detach().cpu().float().numpy()
+            yield from _emit(seg_np)
+
     if pcm_buf and not cancel_flag.is_set():
-        yield bytes(pcm_buf)
+        remaining = len(pcm_buf)
+        # Force alignement 2 octets (sample boundary)
+        if remaining % OUTPUT_BYTES_PER_SAMPLE != 0:
+            log.warning("drain final non aligne (%d B), troncature 1 octet", remaining)
+            remaining -= 1
+            del pcm_buf[remaining:]
+        pad = target - (remaining % target)
+        if pad and pad != target:
+            # v6.0 perf audit : silence pre-alloue (cf. _SILENCE_PAD) pour eviter
+            # une allocation `b"\x00" * pad` a chaque drain.
+            pcm_buf.extend(_SILENCE_PAD[:pad])
+        # Yield en chunks plein-target
+        for off in range(0, len(pcm_buf), target):
+            yield bytes(pcm_buf[off:off + target])
         pcm_buf.clear()
 
 
@@ -252,20 +365,29 @@ class Session:
     _executor: "concurrent.futures.ThreadPoolExecutor | None" = None
 
     def __init__(self, chunk_bytes: int) -> None:
-        self.chunk_bytes = chunk_bytes
+        self.chunk_bytes = _normalize_chunk_bytes(chunk_bytes)
         self._cancel = threading.Event()
         if Session._executor is None:
             Session._executor = concurrent.futures.ThreadPoolExecutor(
                 max_workers=2, thread_name_prefix="orpheus-ws"
             )
 
+    @profile_block("Orpheus handle (ws mainloop)", threshold_ms=10)
     async def handle(self, ws) -> None:
+        # v5.1 : envoie la phase courante (ready_loading / ready_warmup / ready_online)
         await ws.send(json.dumps({
             "type": "ready",
-            "phase": "ready_online",
+            "phase": READY_PHASE,
             "sample_rate": SAMPLE_RATE,
             "backend": "orpheus-gguf",
         }))
+        # Enregistre le client pour broadcast de transition de phase
+        CONNECTED_CLIENTS.add(ws)
+        # v5.2 FSM/WS audit : on dispatche la synthèse dans une Task pour
+        # que le `async for raw in ws` puisse continuer à lire les messages
+        # (notamment `cancel`) pendant la génération. Avant : cancel était
+        # ignoré jusqu'à la fin de _do_synthesize (5–60 s de retard).
+        synth_task: "asyncio.Task | None" = None
         try:
             async for raw in ws:
                 if not isinstance(raw, str):
@@ -276,8 +398,23 @@ class Session:
                     continue
                 t = msg.get("type")
                 if t == "synthesize":
+                    if READY_PHASE != "ready_online":
+                        await ws.send(json.dumps({
+                            "type": "error",
+                            "message": f"orpheus not ready (phase={READY_PHASE})",
+                        }))
+                        continue
+                    # Si une synthèse précédente est encore en cours, on l'annule
+                    # avant de lancer la nouvelle (sémantique : un seul stream
+                    # actif par session).
+                    if synth_task and not synth_task.done():
+                        self._cancel.set()
+                        try:
+                            await synth_task
+                        except Exception:
+                            log.exception("synth_task précédent err")
                     self._cancel.clear()
-                    await self._do_synthesize(ws, msg)
+                    synth_task = asyncio.create_task(self._do_synthesize(ws, msg))
                 elif t == "cancel":
                     self._cancel.set()
                 elif t == "ping":
@@ -305,14 +442,24 @@ class Session:
             pass
         except Exception:
             log.exception("Session erreur")
+        finally:
+            # Annule toute synth en vol avant de fermer
+            if synth_task and not synth_task.done():
+                self._cancel.set()
+                try:
+                    await asyncio.wait_for(synth_task, timeout=2.0)
+                except (asyncio.TimeoutError, Exception):
+                    synth_task.cancel()
+            CONNECTED_CLIENTS.discard(ws)
 
+    @profile_block("Orpheus _do_synthesize (synth)", threshold_ms=20)
     async def _do_synthesize(self, ws, msg: dict) -> None:
         text = (msg.get("text") or "").strip()
         if not text:
             await ws.send(json.dumps({"type": "error", "message": "Empty text"}))
             return
 
-        rate = float(msg.get("rate", 1.0))
+        rate = float(msg.get("rate", 0.93))
         voice = (msg.get("voice") or "").strip().lower() or STATE.default_voice
         await ws.send(json.dumps({"type": "start", "text": text}))
 
@@ -352,6 +499,15 @@ class Session:
         chunks_sent = 0
         err_msg: "str | None" = None
 
+        # Pacing : on envoie chaque chunk a la cadence reelle de sa duree
+        # audio. Le 1er chunk part immediatement (no-pace) pour minimiser la
+        # latence au top du parler. Les suivants sont espaces de
+        # `chunk_duration_s`. Cela evite les bursts (= surcharge ring buffer
+        # client => underflow apres) et garantit un debit regulier.
+        target_bytes = self.chunk_bytes
+        chunk_duration_s = target_bytes / float(SAMPLE_RATE * OUTPUT_BYTES_PER_SAMPLE)
+        next_send_at = None  # rempli apres le 1er chunk
+
         while True:
             item = await queue.get()
             if item is SENTINEL:
@@ -361,14 +517,42 @@ class Session:
                 break
             if self._cancel.is_set():
                 continue
+
+            # Validation taille / alignement
+            n = len(item)
+            if n == 0:
+                log.warning("[ws] chunk vide ignore")
+                continue
+            if n % OUTPUT_BYTES_PER_SAMPLE != 0:
+                log.warning("[ws] chunk mal aligne (%d B), troncature", n)
+                item = item[: n - (n % OUTPUT_BYTES_PER_SAMPLE)]
+                n = len(item)
+            if n != target_bytes:
+                # Tolere uniquement si dernier chunk drain (taille != target)
+                log.debug("[ws] chunk taille %d != target %d", n, target_bytes)
+
+            # Pacing temps-reel : on attend jusqu'au prochain creneau
+            now = time.monotonic()
+            if next_send_at is not None:
+                wait = next_send_at - now
+                if wait > 0:
+                    # Cap defensif : jamais plus que la duree d'un chunk
+                    await asyncio.sleep(min(wait, chunk_duration_s))
             await ws.send(item)
-            total_bytes += len(item)
+            sent_at = time.monotonic()
+            total_bytes += n
             chunks_sent += 1
             if first_chunk_ms is None:
-                first_chunk_ms = (time.monotonic() - t0) * 1000.0
-                log.info("[ws] first_chunk_ms=%.0f", first_chunk_ms)
-            if chunks_sent % 8 == 0:
-                await asyncio.sleep(0)
+                first_chunk_ms = (sent_at - t0) * 1000.0
+                log.info(
+                    "[ws] first_chunk_ms=%.0f size=%dB dur=%.1fms",
+                    first_chunk_ms, n, chunk_duration_s * 1000.0,
+                )
+                next_send_at = sent_at + chunk_duration_s
+            else:
+                # Avance la deadline d'un cran ; si on a glisse (next < now),
+                # on resynchronise sur 'now' pour ne jamais empiler de retard.
+                next_send_at = max(sent_at, next_send_at) + chunk_duration_s
 
         await fut
 
@@ -436,27 +620,113 @@ async def _serve(host: str, port: int, chunk_bytes: int) -> None:
         "WebSocket Orpheus sur ws://%s:%d (health: http://127.0.0.1:%d/health, chunk=%dB)",
         host, port, port, chunk_bytes,
     )
+    # Import différé : ce module est dans services/, le helper dans python/shared.
+    try:
+        from python.shared.graceful_shutdown import install_shutdown
+    except ImportError:
+        import sys, pathlib
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
+        from python.shared.graceful_shutdown import install_shutdown
+    token = install_shutdown(name="orpheus")
     async with websockets.serve(
         handler,
         bind_host,
         port,
         max_size=None,
         process_request=process_request,
-    ):
-        await asyncio.Future()
+    ) as server:
+        try:
+            await token.wait()
+        finally:
+            log.info("[orpheus] fermeture WS server (clients=%d)", len(CONNECTED_CLIENTS))
+            for ws in list(CONNECTED_CLIENTS):
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
+            CONNECTED_CLIENTS.clear()
 
 
 def _warmup() -> None:
-    """Premiere generation jetee : evite la latence sur la 1re requete client."""
+    """Warmup LLM complet (multi-voix) pour amortir l'init CUDA et stabiliser
+    le first_chunk de la 1re synthese reelle. Couvre toutes les voix declarees
+    (pierre, amelie, marie...) car llama.cpp re-allouer le KV cache au 1er
+    appel par voix peut couter ~300-400 ms supplementaires.
+    Utilise le meme chunk_bytes que le runtime (lu via ORPHEUS_WS_CHUNK_BYTES)
+    pour amortir aussi le bon chemin SNAC->WAV.
+    Aucun audio n'est emis (chunks consommes et jetes), aucun token logge.
+    """
     try:
-        t0 = time.monotonic()
+        t_total = time.monotonic()
         cancel = threading.Event()
-        n = 0
-        for chunk in _stream_pcm("Bonjour.", STATE.default_voice, 1.0, 480, cancel):
-            n += len(chunk)
-        log.info("[warmup] %d octets PCM en %.0f ms", n, (time.monotonic() - t0) * 1000.0)
+        # Meme chunk_bytes que le runtime (1920 en prod) pour ne pas laisser
+        # un cold path SNAC->WAV non amorti.
+        chunk_bytes = int(os.environ.get("ORPHEUS_WS_CHUNK_BYTES", "1920"))
+        # Phrase courte mais > 1 token : force l'init reelle des kernels
+        # CUDA (cuBLAS GEMM, flash-attn, KV cache prefill) sur un prompt
+        # equivalent a une vraie requete utilisateur.
+        warm_text = "Bonjour, ceci est un warmup interne."
+        per_voice_ms = []
+        for voice in STATE.voices:
+            t_v = time.monotonic()
+            n = 0
+            for chunk in _stream_pcm(warm_text, voice, 1.0, chunk_bytes, cancel):
+                n += len(chunk)
+            per_voice_ms.append((voice, (time.monotonic() - t_v) * 1000.0, n))
+        details = " | ".join(f"{v}={ms:.0f}ms/{nb}B" for v, ms, nb in per_voice_ms)
+        log.info(
+            "[warmup] complet en %.0f ms chunk=%dB (%s)",
+            (time.monotonic() - t_total) * 1000.0, chunk_bytes, details,
+        )
     except Exception as exc:
         log.warning("[warmup] echec (non fatal): %s", exc)
+
+
+async def _broadcast_phase(new_phase: str) -> None:
+    """Notifie tous les clients connectés d'une transition de phase readiness."""
+    global READY_PHASE
+    READY_PHASE = new_phase
+    payload = json.dumps({
+        "type": "ready",
+        "phase": new_phase,
+        "sample_rate": SAMPLE_RATE,
+        "backend": "orpheus-gguf",
+    })
+    log.info("[phase] -> %s (clients=%d)", new_phase, len(CONNECTED_CLIENTS))
+    dead = []
+    for ws in list(CONNECTED_CLIENTS):
+        try:
+            await ws.send(payload)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        CONNECTED_CLIENTS.discard(ws)
+
+
+async def _bg_load(do_warmup: bool) -> None:
+    """Charge les modèles + warmup en arrière-plan, sans bloquer le port WS."""
+    loop = asyncio.get_running_loop()
+    try:
+        log.info("[bg_load] chargement GGUF + SNAC...")
+        await loop.run_in_executor(None, load_models)
+        await _broadcast_phase("ready_warmup")
+        if do_warmup:
+            log.info("[bg_load] warmup...")
+            await loop.run_in_executor(None, _warmup)
+        await _broadcast_phase("ready_online")
+        log.info("[bg_load] Orpheus ONLINE")
+    except Exception:
+        log.exception("[bg_load] echec")
+
+
+async def _async_main(host: str, port: int, chunk_bytes: int, do_warmup: bool) -> None:
+    # Lance le serveur WS d'abord (port ouvert immédiatement, phase=ready_loading)
+    # puis charge les modèles en arrière-plan.
+    load_task = asyncio.create_task(_bg_load(do_warmup))
+    try:
+        await _serve(host, port, chunk_bytes)
+    finally:
+        load_task.cancel()
 
 
 def main() -> None:
@@ -469,10 +739,7 @@ def main() -> None:
     ap.add_argument("--no-warmup", action="store_true")
     args = ap.parse_args()
 
-    load_models()
-    if not args.no_warmup:
-        _warmup()
-    asyncio.run(_serve(args.host, args.port, args.ws_chunk_bytes))
+    asyncio.run(_async_main(args.host, args.port, args.ws_chunk_bytes, not args.no_warmup))
 
 
 if __name__ == "__main__":

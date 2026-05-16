@@ -66,7 +66,7 @@ class CognitiveProfilingEngine:
                             "throughput": push + pull,
                         })
             except Exception:
-                pass
+                log.debug("layer profiling failed", exc_info=True)
 
         # Profiler les micro-agents
         if self._micro:
@@ -87,7 +87,7 @@ class CognitiveProfilingEngine:
                             "avg_latency_ms": m["avg_latency_ms"],
                         })
             except Exception:
-                pass
+                log.debug("micro-agent profiling failed", exc_info=True)
 
         # Profiler les macro-agents
         if self._macro:
@@ -100,7 +100,7 @@ class CognitiveProfilingEngine:
                         "tasks_handled": m.get("tasks_handled", 0),
                     })
             except Exception:
-                pass
+                log.debug("macro-agent profiling failed", exc_info=True)
 
         record = {
             "id": f"ps_{uuid.uuid4().hex[:8]}",

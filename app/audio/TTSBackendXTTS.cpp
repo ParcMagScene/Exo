@@ -1,5 +1,6 @@
 #include "TTSBackendXTTS.h"
 #include "TTSManager.h"
+#include "utils/SafeIO.h"
 
 #include <QWebSocket>
 #include <QEventLoop>
@@ -16,13 +17,17 @@ TTSBackendXTTS::TTSBackendXTTS(QObject *parent)
 
 TTSBackendXTTS::~TTSBackendXTTS()
 {
-    if (m_keepaliveTimer) {
+    // v5.2 memory audit : m_keepaliveTimer est un QObject child de `this`
+    // (cf. setupKeepalive : `new QTimer(this)`). Qt le détruira via la chaîne
+    // parent—enfant. On stoppe juste pour éviter un dernier tick en vol.
+    if (m_keepaliveTimer)
         m_keepaliveTimer->stop();
-        delete m_keepaliveTimer;
-    }
     if (m_ws) {
+        // QWebSocket sans parent : utiliser deleteLater pour éviter de courir
+        // avec un signal en vol (textMessageReceived/binaryMessageReceived).
         m_ws->close();
-        delete m_ws;
+        m_ws->deleteLater();
+        m_ws = nullptr;
     }
 }
 
@@ -84,7 +89,9 @@ void TTSBackendXTTS::setupKeepalive()
     m_keepaliveTimer->setInterval(15000);  // ping every 15s
     connect(m_keepaliveTimer, &QTimer::timeout, this, [this]() {
         if (m_ws && m_connected) {
-            m_ws->sendTextMessage(QStringLiteral(R"({"type":"ping"})"));
+            exo::safeio::wsSafeSend(m_ws,
+                QStringLiteral(R"({"type":"ping"})"),
+                "TTSBackendXTTS::keepalive");
         } else {
             qInfo() << "[TTS] keepalive: connection lost, reconnecting...";
             ensureConnected();
@@ -97,7 +104,9 @@ void TTSBackendXTTS::setupKeepalive()
 void TTSBackendXTTS::cancel()
 {
     if (m_ws && m_connected)
-        m_ws->sendTextMessage(QStringLiteral(R"({"type":"cancel"})"));
+        exo::safeio::wsSafeSend(m_ws,
+            QStringLiteral(R"({"type":"cancel"})"),
+            "TTSBackendXTTS::cancel");
 }
 
 bool TTSBackendXTTS::tryConnect()
@@ -105,7 +114,20 @@ bool TTSBackendXTTS::tryConnect()
     if (m_ws)
         resetConnection();
 
-    m_ws = new QWebSocket();
+    // v5.2 memory audit : QWebSocket parenté sur `this` → cleanup automatique
+    // par Qt si le backend est détruit avant resetConnection.
+    m_ws = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
+
+    // v5.2 FSM/WS audit : suivre les déconnexions réelles pour invalider
+    // m_connected. Avant : si TCP drop (firewall, kill serveur), m_connected
+    // restait true et la prochaine synthèse envoyait sur socket mort.
+    connect(m_ws, &QWebSocket::disconnected, this, [this]() {
+        if (m_connected) {
+            qWarning() << "[TTS] WebSocket disconnected — invalidating connection";
+            m_connected = false;
+            m_readyReceived = false;
+        }
+    });
 
     bool gotReady = false;
 
@@ -201,8 +223,13 @@ bool TTSBackendXTTS::synthesize(const TTSRequest &req)
     msg["lang"]  = m_lang;
     msg["rate"]  = static_cast<double>(1.0 + req.prosody.rate * 0.5);   // [-1,1] → [0.5, 1.5]
     msg["pitch"] = static_cast<double>(1.0 + req.prosody.pitch * 0.3);  // [-1,1] → [0.7, 1.3]
-    m_ws->sendTextMessage(
-        QString::fromUtf8(QJsonDocument(msg).toJson(QJsonDocument::Compact)));
+    if (exo::safeio::wsSafeSend(m_ws,
+            QString::fromUtf8(QJsonDocument(msg).toJson(QJsonDocument::Compact)),
+            "TTSBackendXTTS::synthesize") < 0) {
+        qWarning() << "[TTS] synthesize: envoi WS échoué — abort";
+        resetConnection();
+        return false;
+    }
 
     // Wait for: JSON "start" → binary PCM chunks → JSON "end"
     // Using QEventLoop instead of processEvents busy-wait
@@ -220,6 +247,12 @@ bool TTSBackendXTTS::synthesize(const TTSRequest &req)
         this, [this, &synthTimeout, &synthLatency, &gotAudio](const QByteArray &data) {
             if (data.isEmpty())
                 return;
+            // v5.2 FSM/WS audit : drop chunks orphelins arrivés après un cancel
+            // (le serveur a peut-être encore des chunks en vol au moment du cancel).
+            if (isCancelled()) {
+                synthTimeout.start();  // reset timeout pour ne pas bloquer la sortie sur 'end'
+                return;
+            }
             gotAudio = true;
             if (synthLatency.isValid()) {
                 const qint64 firstMs = synthLatency.elapsed();

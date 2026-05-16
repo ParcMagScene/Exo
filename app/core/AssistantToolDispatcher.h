@@ -60,5 +60,7 @@ private:
 
     QMap<QString, QWebSocket*> m_toolSockets;
     QMap<QString, QString> m_pendingToolCalls;
+    // Audit P3.4 : tracking durée (service -> {toolUseId, startMs}) pour métriques
+    QMap<QString, qint64> m_pendingStartTimes;
     QSet<QString> m_guiToolCalls;
 };

@@ -228,7 +228,7 @@ class TTSPredictive:
             return
 
         # Attendre le seuil minimum de buffer
-        sample_rate = 24000  # CosyVoice2 native rate
+        sample_rate = 24000  # Orpheus native rate
         bytes_per_sample = 2  # PCM16
         ms_per_chunk = (self._chunk_size / (sample_rate * bytes_per_sample)) * 1000
 

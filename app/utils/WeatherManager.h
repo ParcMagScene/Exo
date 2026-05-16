@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QTimer>
 #include <QDateTime>
+#include <functional>
 
 /**
  * @brief Gestionnaire météorologique intégré
@@ -48,6 +49,12 @@ public:
     // Configuration
     void setApiKey(const QString &apiKey);
     void initialize();
+
+    // Requête one-shot pour une ville arbitraire (n'affecte pas l'état interne).
+    // Le callback reçoit un QJsonObject avec status / temperature / description /
+    // city / humidity / wind_speed (ou status=error + message).
+    void fetchWeatherFor(const QString &city,
+                         std::function<void(const QJsonObject &)> callback);
 
 public slots:
     // Méthodes appelables depuis QML et VoicePipeline

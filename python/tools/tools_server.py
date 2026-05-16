@@ -1,5 +1,9 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
+
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+import os
+os.chdir("D:/EXO/")
 EXO v5.2 — Tools Server (WebSocket)
 Port 8776 — Calculs mathématiques, conversions d'unités, dates
 
@@ -13,7 +17,10 @@ Protocol WebSocket :
 
 import ast
 import asyncio
-import json
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
 import logging
 import math
 import operator
@@ -32,8 +39,33 @@ except ImportError:
 from shared.singleton_guard import ensure_single_instance
 from shared.base_service import init_v9
 
+
+# --- Logging EXO centralisé (identique C++) ---
+import os
+from pathlib import Path
+def _get_exo_logfile():
+    # Correction : tous les logs doivent aller dans D:/EXO/logs/
+    log_dir = os.environ.get("EXO_LOGS_DIR", "D:/EXO/logs")
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    ts = os.environ.get("EXO_SESSION_TIMESTAMP")
+    if not ts:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(log_dir, f"exo_{ts}.log")
+
+logfile = _get_exo_logfile()
+
+_file_handler = logging.FileHandler(logfile, encoding="utf-8", delay=False)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [Tools] %(message)s"))
+_file_handler.flush = _file_handler.stream.flush
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [Tools] %(message)s")
 log = logging.getLogger("tools_server")
+log.addHandler(_file_handler)
+log.propagate = True
+log.info("=== EXO TOOLS_SERVER STARTUP ===")
+_file_handler.flush()
 
 PORT = 8776
 

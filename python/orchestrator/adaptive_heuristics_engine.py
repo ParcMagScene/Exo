@@ -75,7 +75,7 @@ class AdaptiveHeuristicsEngine:
                                 "reason": "adjusted for bottleneck compensation",
                             })
             except Exception:
-                pass
+                log.debug("strategy weight adjustment failed", exc_info=True)
 
         # Normaliser les poids
         total = sum(s["weight"] for s in self._strategies)

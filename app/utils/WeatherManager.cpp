@@ -159,6 +159,73 @@ QString WeatherManager::buildApiUrl(const QString &endpoint) const
     return url.toString();
 }
 
+void WeatherManager::fetchWeatherFor(const QString &city,
+                                     std::function<void(const QJsonObject &)> callback)
+{
+    if (!callback) {
+        return;
+    }
+    if (city.trimmed().isEmpty()) {
+        callback(QJsonObject{
+            {QStringLiteral("status"),  QStringLiteral("error")},
+            {QStringLiteral("message"), QStringLiteral("Ville non spécifiée")}});
+        return;
+    }
+    if (m_apiKey.isEmpty()) {
+        callback(QJsonObject{
+            {QStringLiteral("status"),  QStringLiteral("error")},
+            {QStringLiteral("message"), QStringLiteral("Clé API météo manquante")}});
+        return;
+    }
+
+    QUrl url(QString("%1/weather").arg(API_BASE_URL));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("q"), city);
+    query.addQueryItem(QStringLiteral("appid"), m_apiKey);
+    query.addQueryItem(QStringLiteral("units"), QStringLiteral("metric"));
+    query.addQueryItem(QStringLiteral("lang"), QStringLiteral("fr"));
+    url.setQuery(query);
+
+    QNetworkRequest request;
+    request.setUrl(url);
+    request.setRawHeader("User-Agent", "EXO Assistant v4.2");
+
+    QNetworkReply *reply = m_networkManager->get(request);
+    QString cityCopy = city;
+    connect(reply, &QNetworkReply::finished, this,
+            [reply, cityCopy, callback]() {
+        QJsonObject out;
+        if (reply->error() == QNetworkReply::NoError) {
+            const QByteArray data = reply->readAll();
+            const QJsonDocument doc = QJsonDocument::fromJson(data);
+            if (!doc.isNull() && doc.isObject()) {
+                const QJsonObject json = doc.object();
+                const QJsonObject main = json.value(QStringLiteral("main")).toObject();
+                const QJsonArray  weatherArr = json.value(QStringLiteral("weather")).toArray();
+                const QJsonObject weather0 = weatherArr.isEmpty()
+                    ? QJsonObject() : weatherArr.first().toObject();
+                const QJsonObject wind = json.value(QStringLiteral("wind")).toObject();
+
+                out[QStringLiteral("status")]      = QStringLiteral("success");
+                out[QStringLiteral("city")]        = json.value(QStringLiteral("name")).toString(cityCopy);
+                out[QStringLiteral("temperature")] = QString::number(main.value(QStringLiteral("temp")).toDouble(), 'f', 1);
+                out[QStringLiteral("description")] = weather0.value(QStringLiteral("description")).toString();
+                out[QStringLiteral("humidity")]    = QString::number(main.value(QStringLiteral("humidity")).toInt());
+                out[QStringLiteral("wind_speed")]  = QString::number(wind.value(QStringLiteral("speed")).toDouble(), 'f', 1);
+            } else {
+                out[QStringLiteral("status")]  = QStringLiteral("error");
+                out[QStringLiteral("message")] = QStringLiteral("Réponse météo invalide");
+            }
+        } else {
+            out[QStringLiteral("status")]  = QStringLiteral("error");
+            out[QStringLiteral("message")] = QStringLiteral("Erreur réseau météo : %1")
+                                                .arg(reply->errorString());
+        }
+        callback(out);
+        reply->deleteLater();
+    });
+}
+
 void WeatherManager::onWeatherReplyFinished()
 {
     QNetworkReply *reply = qobject_cast<QNetworkReply*>(sender());

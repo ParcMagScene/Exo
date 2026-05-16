@@ -6,10 +6,10 @@
 class QWebSocket;
 
 // ─────────────────────────────────────────────────────
-//  TTSBackendXTTS — CosyVoice2-0.5B Python backend (CUDA)
+//  TTSBackendXTTS — Orpheus 3B FR GGUF Q8 Python backend (CUDA)
 //
 //  Non-blocking WebSocket synthesis via QEventLoop.
-//  Protocol: JSON control + binary PCM16 chunks.
+//  Protocol: JSON control + binary PCM16 chunks (24 kHz mono).
 //  (class name kept as TTSBackendXTTS for ABI compat)
 // ─────────────────────────────────────────────────────
 class TTSBackendXTTS : public TTSBackend
@@ -19,7 +19,7 @@ public:
     explicit TTSBackendXTTS(QObject *parent = nullptr);
     ~TTSBackendXTTS() override;
 
-    QString name() const override { return QStringLiteral("CosyVoice2"); }
+    QString name() const override { return QStringLiteral("Orpheus"); }
     bool isAvailable() const override;
     bool synthesize(const TTSRequest &req) override;
     void cancel() override;
@@ -41,8 +41,8 @@ private:
     bool m_connected = false;
     bool m_readyReceived = false;
 
-    // P1.3: Increased from 12s to 30s for CosyVoice2 under GPU load
-    // Typical: 1.0-1.2s first chunk, 2-5s full phrase, max ~20s under GPU contention
+    // P1.3: 30s timeout for Orpheus 3B GGUF under GPU load
+    // Typical: 1.0-1.5s first chunk, 2-6s full phrase, max ~20s under GPU contention
     static constexpr int PY_TTS_TIMEOUT_MS = 30000;  // 30s timeout (covers 99.9% cases)
     QTimer *m_keepaliveTimer = nullptr;
     void setupKeepalive();

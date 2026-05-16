@@ -11,15 +11,15 @@
 #  RACCOURCI WINDOWS
 #  -----------------
 #  Cible :
-#    powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "D:\EXO\project\launch_exo_silent.ps1"
+#    powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "D:\EXO\launch_exo_silent.ps1"
 #  Demarrer dans :
-#    D:\EXO\project
+#    D:\EXO
 #  Executer en :
 #    Reduit (le -WindowStyle Hidden masque deja la fenetre).
 #
 #  COMMANDES DISPONIBLES (en interactif)
 #  -------------------------------------
-#    . D:\EXO\project\launch_exo_silent.ps1   # dot-source pour exposer les fonctions
+#    . D:\EXO\launch_exo_silent.ps1   # dot-source pour exposer les fonctions
 #    Start-EXO       # demarre tous les services + GUI (silencieux, non bloquant)
 #    Stop-EXO        # arrete proprement tous les processus EXO
 #    Restart-EXO     # Stop-EXO puis Start-EXO
@@ -35,10 +35,21 @@ param()
 $ErrorActionPreference = 'Stop'
 
 # --- Racines ----------------------------------------------------------------
-$script:ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $script:ProjectDir) { $script:ProjectDir = 'D:\EXO\project' }
-$script:SsdRoot    = if ($env:EXO_ROOT) { $env:EXO_ROOT } else { 'D:\EXO' }
-$script:LogDir     = Join-Path $script:SsdRoot 'logs'
+$script:ProjectDir = 'D:/EXO'
+$script:SsdRoot    = 'D:/EXO'
+
+# --- Forcer le working directory à D:/EXO/ ---
+if (((Get-Location).Path -replace '\\','/') -ne 'D:/EXO') {
+    Write-Host "ERREUR : Ce lanceur doit être exécuté depuis D:/EXO/." -ForegroundColor Red
+    Set-Location "D:/EXO/"
+    if (((Get-Location).Path -replace '\\','/') -ne 'D:/EXO') {
+        Write-Host "Impossible de corriger le working directory. Arrêt." -ForegroundColor Red
+        exit 1
+    } else {
+        Write-Host "Working directory corrigé en D:/EXO/." -ForegroundColor Yellow
+    }
+}
+$script:LogDir     = Join-Path $script:ProjectDir 'logs'
 $script:LauncherLog = Join-Path $script:LogDir 'launcher.log'
 $script:PidStore    = Join-Path $script:LogDir 'exo_pids.json'
 
@@ -61,8 +72,41 @@ function Write-Launcher {
 }
 
 # --- PID store --------------------------------------------------------------
+#
+#  Sur Windows, les venv utilisent une SHIM `.venv\Scripts\python.exe` qui
+#  spawn ensuite le vrai `Python311\python.exe` (worker). On stocke les DEUX
+#  PIDs (shim + worker) pour garantir un Stop-EXO complet sans orphelins.
+# ----------------------------------------------------------------------------
+function Get-WorkerPidForShim {
+    <# Resout le PID du worker Python (child) a partir du PID de la shim venv.
+       Strategies (avec retry court pour tolerer la race au demarrage) :
+         1. Si Port>0 et listening -> OwningProcess du port (le plus fiable).
+         2. Sinon : Win32_Process avec ParentProcessId == ShimPid (1ere occurrence).
+       Retry jusqu'a TimeoutMs (defaut 2000ms) puis retourne 0.
+    #>
+    param([int]$ShimPid, [int]$Port = 0, [int]$TimeoutMs = 2000)
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMs)
+    while ((Get-Date) -lt $deadline) {
+        if ($Port -gt 0) {
+            $conn = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($conn -and $conn.OwningProcess -gt 0) { return [int]$conn.OwningProcess }
+        }
+        try {
+            $child = Get-CimInstance Win32_Process -Filter "ParentProcessId=$ShimPid" -ErrorAction Stop | Select-Object -First 1
+            if ($child) { return [int]$child.ProcessId }
+        } catch {}
+        Start-Sleep -Milliseconds 150
+    }
+    return 0
+}
+
 function Save-EXOPidEntry {
-    param([string]$Name, [int]$ProcessId, [int]$Port)
+    param(
+        [string]$Name,
+        [int]$ProcessId,
+        [int]$Port,
+        [int]$WorkerProcessId = 0
+    )
     $store = @{}
     if (Test-Path $script:PidStore) {
         try {
@@ -74,9 +118,10 @@ function Save-EXOPidEntry {
         } catch { $store = @{} }
     }
     $store[$Name] = [pscustomobject]@{
-        pid       = $ProcessId
-        port      = $Port
-        started   = (Get-Date -Format 'o')
+        pid        = $ProcessId
+        worker_pid = $WorkerProcessId
+        port       = $Port
+        started    = (Get-Date -Format 'o')
     }
     ($store | ConvertTo-Json -Depth 4) | Set-Content -Path $script:PidStore -Encoding UTF8
 }
@@ -194,11 +239,76 @@ function Start-EXOService {
 
     if ($HealthTimeoutSeconds -gt 0) {
         if (Wait-PortReady -Port $Port -TimeoutSeconds $HealthTimeoutSeconds) {
-            Write-Launcher "$Name ready" -Level 'OK'
+            # Resout le PID du worker child (vrai Python qui ecoute le port).
+            $workerPid = Get-WorkerPidForShim -ShimPid $proc.Id -Port $Port -TimeoutMs 5000
+            if ($workerPid -gt 0 -and $workerPid -ne $proc.Id) {
+                Save-EXOPidEntry -Name $Name -ProcessId $proc.Id -Port $Port -WorkerProcessId $workerPid
+                Write-Launcher "$Name ready (shim=$($proc.Id), worker=$workerPid)" -Level 'OK'
+            } else {
+                Write-Launcher "$Name ready (worker_pid non resolu - fallback parent-PID actif)" -Level 'OK'
+            }
         } else {
             Write-Launcher "$Name timeout (port $Port pas pret en ${HealthTimeoutSeconds}s)" -Level 'FAIL'
         }
     }
+}
+
+# --- Orphan cleanup --------------------------------------------------------
+function Remove-EXOOrphanWorkers {
+    <# Detecte et tue les python.exe qui executent un script EXO mais
+       n'ecoutent aucun port EXO et ne sont pas referencees dans
+       exo_pids.json (orphelins de boots precedents ou de double-spawn).
+       Ne touche jamais a Orpheus (services\orpheus\).
+    #>
+    $exoPorts = @(8765,8766,8767,8768,8770,8771,8772,8773,8774,8775,8776,8777,8778,8779,8780,8783,8784,8785,8790)
+    $listeners = @{}
+    foreach ($p in $exoPorts) {
+        $c = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($c) { $listeners[[int]$c.OwningProcess] = $p }
+    }
+    # Set de PIDs legitimes (shims + workers connus) issus du store.
+    $known = @{}
+    try {
+        if (Test-Path $script:PidStore) {
+            $store = Get-Content $script:PidStore -Raw | ConvertFrom-Json
+            foreach ($prop in $store.PSObject.Properties) {
+                $e = $prop.Value
+                if ($e.pid)        { $known[[int]$e.pid] = $true }
+                if ($e.worker_pid) { $known[[int]$e.worker_pid] = $true }
+            }
+        }
+    } catch {}
+    $killed = 0; $freedMb = 0
+    $procs = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue
+    foreach ($pr in $procs) {
+        $cmd = if ($pr.CommandLine) { $pr.CommandLine } else { '' }
+        # On ne cible que les workers EXO (chargent un script EXO connu).
+        if ($cmd -notmatch 'D:[\\/]EXO[\\/](python|services)[\\/]') { continue }
+        # Jamais Orpheus.
+        if ($cmd -match 'services[\\/]orpheus[\\/]') { continue }
+        # On preserve les listeners actifs.
+        if ($listeners.ContainsKey([int]$pr.ProcessId)) { continue }
+        # On preserve tout PID present dans exo_pids.json (shim ou worker connu).
+        if ($known.ContainsKey([int]$pr.ProcessId)) { continue }
+        # On preserve aussi tout child d'un shim connu (le worker_pid n'a
+        # peut-etre pas encore ete capture au moment du cleanup).
+        if ($known.ContainsKey([int]$pr.ParentProcessId)) { continue }
+        # Reste : workers EXO inconnus ET sans port = orphelins surs.
+        try {
+            $ramMb = [math]::Round($pr.WorkingSetSize/1MB,0)
+            Stop-Process -Id $pr.ProcessId -Force -ErrorAction Stop
+            Write-Launcher "Orphan worker tue : PID=$($pr.ProcessId) RAM=${ramMb}MB cmd=$($cmd.Substring(0,[math]::Min(80,$cmd.Length)))" -Level 'OK'
+            $killed++; $freedMb += $ramMb
+        } catch {
+            Write-Launcher "Orphan PID=$($pr.ProcessId) : echec kill ($($_.Exception.Message))" -Level 'WARN'
+        }
+    }
+    if ($killed -gt 0) {
+        Write-Launcher "Orphan cleanup : $killed process(es) tue(s), ~${freedMb}MB libere(s)" -Level 'OK'
+    } else {
+        Write-Launcher "Orphan cleanup : aucun orphelin detecte" -Level 'INFO'
+    }
+    return $killed
 }
 
 # ===========================================================================
@@ -212,18 +322,27 @@ function Start-EXO {
     Write-Launcher "ProjectDir = $script:ProjectDir"             -Level 'INFO'
     Write-Launcher "SsdRoot    = $script:SsdRoot"                -Level 'INFO'
 
+    # --- Génération du timestamp de session EXO ----------------------------
+    if (-not $env:EXO_SESSION_TIMESTAMP) {
+        $env:EXO_SESSION_TIMESTAMP = (Get-Date -Format 'yyyyMMdd_HHmmss')
+        Write-Launcher "EXO_SESSION_TIMESTAMP généré : $env:EXO_SESSION_TIMESTAMP" -Level 'INFO'
+    } else {
+        Write-Launcher "EXO_SESSION_TIMESTAMP déjà présent : $env:EXO_SESSION_TIMESTAMP" -Level 'INFO'
+    }
+
     # --- Variables d'environnement EXO --------------------------------------
     $env:PYTHONPATH            = Join-Path $script:ProjectDir 'python'
     $env:EXO_SSD_ROOT          = $script:SsdRoot
-    $env:EXO_WHISPER_MODELS    = Join-Path $script:SsdRoot 'models\whisper'
-    $env:EXO_WHISPERCPP_BIN    = Join-Path $script:SsdRoot 'whispercpp\build_vk\bin\Release'
-    $env:EXO_COSYVOICE_MODELS  = Join-Path $script:SsdRoot 'models\cosyvoice_fr'
-    $env:EXO_FAISS_DIR         = Join-Path $script:SsdRoot 'faiss\semantic_memory'
-    $env:EXO_WAKEWORD_MODELS   = Join-Path $script:SsdRoot 'models\wakeword'
+    $env:EXO_WHISPER_MODELS    = Join-Path $script:SsdRoot 'models/whisper'
+    $env:EXO_WHISPERCPP_BIN    = Join-Path $script:SsdRoot 'whispercpp/build_vk/bin/Release'
+    $env:EXO_ORPHEUS_MODELS    = Join-Path $script:SsdRoot 'models/orpheus_fr_gguf'
+    $env:EXO_FAISS_DIR         = Join-Path $script:SsdRoot 'faiss/semantic_memory'
+    $env:EXO_WAKEWORD_MODELS   = Join-Path $script:SsdRoot 'models/wakeword'
     $env:EXO_FILES_DIR         = Join-Path $script:SsdRoot 'files'
-    $env:HF_HOME               = Join-Path $script:SsdRoot 'cache\huggingface'
-    $env:TRANSFORMERS_CACHE    = Join-Path $script:SsdRoot 'cache\huggingface\hub'
-    $env:TORCH_HOME            = Join-Path $script:SsdRoot 'cache\torch'
+    $env:EXO_LOGS_DIR          = $script:LogDir
+    $env:HF_HOME               = Join-Path $script:SsdRoot 'cache/huggingface'
+    $env:TRANSFORMERS_CACHE    = Join-Path $script:SsdRoot 'cache/huggingface/hub'
+    $env:TORCH_HOME            = Join-Path $script:SsdRoot 'cache/torch'
 
     # Charge .env si present
     $envFile = Join-Path $script:ProjectDir '.env'
@@ -259,31 +378,20 @@ function Start-EXO {
     # 8867, mais le client Qt et les configs pointent sur 8767.
     $TTS_PORT = 8767
 
-    # Engine TTS selectionnable via $env:EXO_TTS_ENGINE :
-    #   "cosyvoice" (defaut) -> python/tts/tts_server_streaming.py    (.venv_stt_tts)
-    #   "orpheus"            -> services/orpheus/server_ws.py         (services/orpheus/venv)
-    # Les deux exposent le MEME protocole WS + /health sur le MEME port.
-    $ttsEngine = ($env:EXO_TTS_ENGINE | ForEach-Object { $_.ToLower() })
-    if (-not $ttsEngine) { $ttsEngine = 'cosyvoice' }
-
-    if ($ttsEngine -eq 'orpheus') {
-        if (-not (Test-Path $pythonOrpheus)) {
-            Write-Launcher "venv Orpheus manquant : $pythonOrpheus -- bascule sur cosyvoice" -Level 'WARN'
-            $ttsEngine = 'cosyvoice'
-        }
+    # Engine TTS : Orpheus 3B FR (GGUF Q8) CUDA - SEUL moteur supporte.
+    # (politique 2026-05-03 : pipeline TTS unique = Orpheus 3B FR GGUF Q8)
+    if (-not (Test-Path $pythonOrpheus)) {
+        Write-Launcher "venv Orpheus manquant : $pythonOrpheus - TTS indisponible" -Level 'FAIL'
+        return
     }
-
-    if ($ttsEngine -eq 'orpheus') {
-        $ttsPython  = $pythonOrpheus
-        $ttsScript  = 'services/orpheus/server_ws.py'
-        $ttsTimeout = 60
-        Write-Launcher "TTS engine = Orpheus 3B FR (GGUF Q8) CUDA" -Level 'INFO'
-    } else {
-        $ttsPython  = $pythonStt
-        $ttsScript  = 'python/tts/tts_server_streaming.py'
-        $ttsTimeout = 10
-        Write-Launcher "TTS engine = CosyVoice2 CUDA" -Level 'INFO'
-    }
+    $ttsPython  = $pythonOrpheus
+    $ttsScript  = 'services/orpheus/server_ws.py'
+    $ttsTimeout = 60
+    # Anti-craquements : chunk WS = 40 ms PCM16 mono @24 kHz = 960 samples = 1920 B.
+    # Le serveur pace l'envoi sur la duree reelle (40 ms par chunk) -> debit
+    # constant cote client, pas de burst, pas d'underflow du ring buffer.
+    if (-not $env:ORPHEUS_WS_CHUNK_BYTES) { $env:ORPHEUS_WS_CHUNK_BYTES = '1920' }
+    Write-Launcher "TTS engine = Orpheus 3B FR (GGUF Q8) CUDA (chunk=$env:ORPHEUS_WS_CHUNK_BYTES B)" -Level 'INFO'
 
     # =======================================================================
     #  Services CRITIQUES (healthcheck synchrone, ~10 s)
@@ -393,6 +501,11 @@ function Start-EXO {
         }
     }
 
+    # --- Auto-cleanup orphelins (zombies de boots precedents ou double-spawn).
+    try { Remove-EXOOrphanWorkers | Out-Null } catch {
+        Write-Launcher "Remove-EXOOrphanWorkers : $($_.Exception.Message)" -Level 'WARN'
+    }
+
     Write-Launcher "================ Start-EXO termine ================" -Level 'OK'
 }
 
@@ -401,30 +514,84 @@ function Start-EXO {
 # ===========================================================================
 function Stop-EXO {
     [CmdletBinding()]
-    param()
+    param(
+        [int]$GuiGraceMs = 3000
+    )
 
     Write-Launcher "================ Stop-EXO ================" -Level 'INFO'
 
-    $store = Get-EXOPidStore
-    foreach ($name in $store.Keys) {
-        $entry = $store[$name]
-        $procId = [int]$entry.pid
+    # 1) Phase gracieuse : envoyer CloseMainWindow a la GUI Qt -> aboutToQuit
+    #    -> ServiceSupervisor::shutdownAll() (ferme les QProcess enfants
+    #    et destructeurs TTSManager / VoicePipeline).
+    $guiProcs = Get-Process -Name 'RaspberryAssistant' -ErrorAction SilentlyContinue
+    foreach ($g in $guiProcs) {
         try {
-            $proc = Get-Process -Id $procId -ErrorAction Stop
-            Stop-Process -Id $procId -Force -ErrorAction Stop
-            Write-Launcher "$name (PID $procId) tue" -Level 'OK'
+            $closed = $g.CloseMainWindow()
+            if ($closed) {
+                Write-Launcher "GUI PID $($g.Id) : CloseMainWindow envoye" -Level 'OK'
+            } else {
+                Write-Launcher "GUI PID $($g.Id) : pas de fenetre principale" -Level 'WARN'
+            }
         } catch {
-            Write-Launcher "$name (PID $procId) deja arrete" -Level 'INFO'
+            Write-Launcher "GUI PID $($g.Id) : CloseMainWindow echec ($($_.Exception.Message))" -Level 'WARN'
         }
     }
 
-    # Filet de securite : tuer aussi tout RaspberryAssistant.exe orphelin.
+    if ($guiProcs.Count -gt 0 -and $GuiGraceMs -gt 0) {
+        $deadline = (Get-Date).AddMilliseconds($GuiGraceMs)
+        while ((Get-Date) -lt $deadline) {
+            $alive = Get-Process -Name 'RaspberryAssistant' -ErrorAction SilentlyContinue
+            if (-not $alive) { break }
+            Start-Sleep -Milliseconds 100
+        }
+    }
+
+    # 2) Phase force : tuer tous les services Python par PID stocke.
+    #    On tue D'ABORD le worker child puis la shim parent (ordre important :
+    #    si on tue la shim en premier, le child devient orphelin sous Windows).
+    $store = Get-EXOPidStore
+    foreach ($name in $store.Keys) {
+        $entry = $store[$name]
+        $shimPid   = [int]$entry.pid
+        $workerPid = if ($entry.PSObject.Properties.Name -contains 'worker_pid') { [int]$entry.worker_pid } else { 0 }
+        # Worker d'abord
+        if ($workerPid -gt 0 -and $workerPid -ne $shimPid) {
+            try {
+                Stop-Process -Id $workerPid -Force -ErrorAction Stop
+                Write-Launcher "$name worker (PID $workerPid) tue" -Level 'OK'
+            } catch {
+                Write-Launcher "$name worker (PID $workerPid) deja arrete" -Level 'INFO'
+            }
+        }
+        # Puis la shim
+        try {
+            Stop-Process -Id $shimPid -Force -ErrorAction Stop
+            Write-Launcher "$name shim (PID $shimPid) tue" -Level 'OK'
+        } catch {
+            Write-Launcher "$name shim (PID $shimPid) deja arrete" -Level 'INFO'
+        }
+    }
+
+    # 3) Filet de securite : tuer tout RaspberryAssistant.exe encore vivant.
     Get-Process -Name 'RaspberryAssistant' -ErrorAction SilentlyContinue | ForEach-Object {
         try {
             Stop-Process -Id $_.Id -Force -ErrorAction Stop
             Write-Launcher "RaspberryAssistant orphelin PID $($_.Id) tue" -Level 'OK'
         } catch {
             Write-Launcher "RaspberryAssistant PID $($_.Id) : $($_.Exception.Message)" -Level 'WARN'
+        }
+    }
+
+    # 4) Filet ULTIME : balayer tous les ports EXO et tuer le owner restant.
+    #    Couvre les workers dont le PID n'a jamais ete capture dans le store.
+    $exoPorts = @(8765,8766,8767,8768,8770,8771,8772,8773,8774,8775,8776,8777,8778,8779,8780,8783,8784,8785,8790)
+    foreach ($p in $exoPorts) {
+        $c = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($c -and $c.OwningProcess -gt 0) {
+            try {
+                Stop-Process -Id $c.OwningProcess -Force -ErrorAction Stop
+                Write-Launcher "Port $p : owner PID $($c.OwningProcess) tue (orphelin)" -Level 'OK'
+            } catch {}
         }
     }
 

@@ -12,12 +12,19 @@ TTSBackendQt::TTSBackendQt(QObject *parent)
 
 TTSBackendQt::~TTSBackendQt()
 {
-    delete m_tts;
+    if (m_tts) {
+        // v5.2 memory audit : QTextToSpeech a des callbacks asynchrones du moteur
+        // de synthèse. Un delete synchrone peut courir avec un stateChanged en vol.
+        m_tts->stop();
+        m_tts->disconnect(this);
+        m_tts->deleteLater();
+        m_tts = nullptr;
+    }
 }
 
 void TTSBackendQt::init()
 {
-    m_tts = new QTextToSpeech();
+    m_tts = new QTextToSpeech(this);
 
     QVoice selected;
     int bestScore = -100000;

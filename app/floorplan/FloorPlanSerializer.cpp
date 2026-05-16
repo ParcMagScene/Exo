@@ -1,4 +1,5 @@
 #include "FloorPlanSerializer.h"
+#include "utils/SafeIO.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -51,7 +52,10 @@ bool FloorPlanSerializer::saveToFile(const QString &path,
 {
     // Ensure parent directory exists
     const QFileInfo fi(path);
-    QDir().mkpath(fi.absolutePath());
+    if (!exo::safeio::ensureDir(fi.absolutePath(), "FloorPlanSerializer::saveToFile")) {
+        qWarning("[FloorPlan] Cannot create directory: %s", qPrintable(fi.absolutePath()));
+        return false;
+    }
 
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {

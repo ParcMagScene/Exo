@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """
+
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+import os
+os.chdir("D:/EXO/")
 EXO Domotique v2 — VoltalisService (WebSocket) — Port 8788
 
 Connecteur pour appareils Voltalis (radiateurs éco-pilotés).

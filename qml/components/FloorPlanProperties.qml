@@ -29,7 +29,7 @@ Rectangle {
     property string selectedId: ""
 
     // ── Computed ──
-    property int selCount: controller ? controller.selectedIds.length : 0
+    property int selCount: (controller && controller.selectedIds) ? controller.selectedIds.length : 0
 
     Connections {
         target: controller

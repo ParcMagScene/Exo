@@ -97,12 +97,25 @@ void WebSocketClient::onConnected()
     setState(State::Connected);
     MetricsManager::instance()->increment(QStringLiteral("ws.connections_established"));
     hDebug(exoMain) << "[WS:" << m_name << "] connected";
+
+    // Audit P2.4 : armer ping 30s pour détecter zombies (TCP keepalive OS = 2h)
+    if (!m_pingTimer) {
+        m_pingTimer = new QTimer(this);
+        connect(m_pingTimer, &QTimer::timeout, this, [this]() {
+            if (m_ws && m_state == State::Connected) {
+                m_ws->ping();
+            }
+        });
+    }
+    m_pingTimer->start(PING_INTERVAL_MS);
+
     emit connected();
 }
 
 void WebSocketClient::onDisconnected()
 {
     setState(State::Disconnected);
+    if (m_pingTimer) m_pingTimer->stop(); // Audit P2.4
     hDebug(exoMain) << "[WS:" << m_name << "] disconnected";
     if (!m_closing)
         emit disconnected();

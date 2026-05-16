@@ -137,7 +137,12 @@ private:
 
     // ── Streaming SSE ────────────────────────────────
     void processStreamChunk(const QByteArray &chunk);
-    void processSSELine(const QString &line);
+    void processSSELine(const QByteArray &line);
+    // Perf: fast-path tente d'extraire {index,text} d'un content_block_delta
+    // text_delta sans construire QJsonDocument/QJsonObject. Renvoie true si
+    // le delta a été appliqué; false → fallback parsing JSON complet.
+    bool tryFastTextDelta(const QByteArray &dataBytes);
+    void applyTextDelta(int index, const QString &text);
     void processSSEEvent(const QString &eventType,
                          const QJsonObject &data);
     void handleContentBlockStart(const QJsonObject &data);

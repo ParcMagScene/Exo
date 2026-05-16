@@ -52,7 +52,7 @@ class SynthesisResult:
 
 
 class TTSClient:
-    """Client WebSocket stateless pour tts_server_streaming."""
+    """Client WebSocket stateless pour le serveur Orpheus (services/orpheus/server_ws.py)."""
 
     def __init__(
         self,

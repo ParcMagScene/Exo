@@ -2,15 +2,13 @@
 #  start_orpheus.ps1 - Lance le serveur Orpheus FR (silencieux, CUDA)
 #
 #  Usage :
-#    . D:\EXO\project\services\orpheus\start_orpheus.ps1
+#    . D:\EXO\services\orpheus\start_orpheus.ps1
 #    Start-Orpheus
 #    Stop-Orpheus
 #    Get-OrpheusStatus
-# =============================================================================
+# ==========================================================================$ErrorActionPreference = 'Stop'
 
-$ErrorActionPreference = 'Stop'
-
-$script:OrpheusDir   = 'D:\EXO\project\services\orpheus'
+$script:OrpheusDir   = 'D:\EXO\services\orpheus'
 $script:OrpheusVenv  = Join-Path $script:OrpheusDir 'venv'
 $script:OrpheusPy    = Join-Path $script:OrpheusVenv 'Scripts\python.exe'
 $script:OrpheusLog   = 'D:\EXO\logs\orpheus_server.log'

@@ -1,5 +1,6 @@
 #include "AIMemoryManager.h"
 #include "core/LogManager.h"
+#include "utils/SafeIO.h"
 
 #include <QStandardPaths>
 #include <QDir>
@@ -672,8 +673,18 @@ void AIMemoryManager::onSemanticDisconnected()
 
 void AIMemoryManager::onSemanticMessage(const QString &msg)
 {
-    QJsonDocument doc = QJsonDocument::fromJson(msg.toUtf8());
-    if (!doc.isObject()) return;
+    QJsonParseError jerr{};
+    QJsonDocument doc = QJsonDocument::fromJson(msg.toUtf8(), &jerr);
+    if (jerr.error != QJsonParseError::NoError) {
+        hWarning(exoAssistant) << "AIMemoryManager: semantic JSON parse error"
+                               << jerr.errorString() << "offset=" << jerr.offset
+                               << "raw=" << msg.left(120);
+        return;
+    }
+    if (!doc.isObject()) {
+        hWarning(exoAssistant) << "AIMemoryManager: semantic payload not an object: " << msg.left(120);
+        return;
+    }
     QJsonObject obj = doc.object();
     QString type = obj["type"].toString();
 
@@ -788,7 +799,7 @@ void AIMemoryManager::saveToFile()
     QMutexLocker lk(&m_mutex);
 
     QString path = memoryFilePath();
-    QDir().mkpath(QFileInfo(path).path());
+    exo::safeio::ensureParentDir(path, "AIMemoryManager::saveToFile");
 
     // Écriture atomique : tmp → rename
     QString tmpPath = path + ".tmp";
@@ -837,7 +848,7 @@ void AIMemoryManager::saveToFile()
 QString AIMemoryManager::memoryFilePath() const
 {
     QString dataPath = qEnvironmentVariable("EXO_FAISS_DIR", QStringLiteral("D:/EXO/faiss/semantic_memory"));
-    QDir().mkpath(dataPath);
+    exo::safeio::ensureDir(dataPath, "AIMemoryManager::memoryFilePath");
     return dataPath + "/exa_memory.json";
 }
 

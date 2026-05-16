@@ -59,11 +59,13 @@ class WhisperCppEngine:
         self.port = port
         self._process: subprocess.Popen | None = None
         self._base_url = f"http://{host}:{port}"
+        self.last_transcribe_ts: float = 0.0  # monotonic timestamp of last transcribe()
 
         if lib_dir is None:
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             lib_dir = os.environ.get(
                 "EXO_WHISPERCPP_BIN",
-                r"D:\EXO\whispercpp\build_vk\bin\Release",
+                os.path.join(project_root, "whispercpp", "build_vk", "bin", "Release"),
             )
         if server_exe is None:
             server_exe = os.path.join(lib_dir, "whisper-server.exe")
@@ -76,6 +78,12 @@ class WhisperCppEngine:
             raise FileNotFoundError(f"whisper-server.exe not found: {self.server_exe}")
         if not os.path.isfile(self.model_path):
             raise FileNotFoundError(f"Model not found: {self.model_path}")
+
+        # Kill any orphan whisper-server.exe binding our port (left over by a
+        # previous EXO crash/restart). Without this, a stale instance keeps the
+        # port and the new one collides → HTTP 500 / WinError 10054 on every
+        # request.
+        self._kill_orphans_on_port()
 
         cmd = [
             self.server_exe,
@@ -165,15 +173,20 @@ class WhisperCppEngine:
 
         t0 = time.monotonic()
         req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        # Timeout : si whisper-server freeze (GPU idle / Vulkan asleep, contention
+        # avec TTS Orpheus, etc.), on restart en ~10s au lieu de 30s. 10s laisse
+        # de la marge en cas de freeze ponctuel sans declencher de restart inutile
+        # (audio 10s, RTF ~0.1 => ~1s de calcul nominal).
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=10) as resp:
                 raw = resp.read().decode("utf-8")
-        except (urllib.error.URLError, ConnectionError, OSError) as e:
+        except (urllib.error.URLError, ConnectionError, OSError, TimeoutError) as e:
             logger.error("whisper-server request failed: %s — restarting server", e)
             self._restart_server()
             return {"text": "", "segments": [], "duration": round(duration, 2)}
 
         dt = time.monotonic() - t0
+        self.last_transcribe_ts = time.monotonic()
 
         # Parse JSON response
         try:
@@ -271,6 +284,60 @@ class WhisperCppEngine:
                 self._process.kill()
                 self._process.wait(timeout=3)
             self._process = None
+        # Belt-and-braces: also nuke any stray whisper-server.exe still bound
+        # to our port (e.g. orphaned by a hard kill of the parent service).
+        self._kill_orphans_on_port()
+
+    def _kill_orphans_on_port(self) -> None:
+        """Kill any whisper-server.exe process currently bound to self.port.
+
+        Necessary because launch_exo_silent.ps1 stops services by PID without
+        terminating their child processes, so a previous whisper-server.exe
+        can outlive the python parent and still hold port 8769.
+        """
+        if os.name != "nt":
+            return
+        try:
+            import psutil  # type: ignore
+        except ImportError:
+            psutil = None  # type: ignore
+        try:
+            killed = 0
+            if psutil is not None:
+                for p in psutil.process_iter(attrs=["pid", "name"]):
+                    try:
+                        name = (p.info.get("name") or "").lower()
+                        if name != "whisper-server.exe":
+                            continue
+                        for c in p.net_connections(kind="inet"):
+                            if c.laddr and c.laddr.port == self.port:
+                                logger.warning(
+                                    "Killing orphan whisper-server.exe pid=%d on port %d",
+                                    p.pid, self.port,
+                                )
+                                p.kill()
+                                killed += 1
+                                break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+            else:
+                # Fallback: blunt taskkill on every whisper-server.exe instance
+                # (no per-port filtering without psutil).
+                r = subprocess.run(
+                    ["tasklist", "/FI", "IMAGENAME eq whisper-server.exe", "/FO", "CSV", "/NH"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if "whisper-server.exe" in r.stdout:
+                    subprocess.run(
+                        ["taskkill", "/F", "/IM", "whisper-server.exe"],
+                        capture_output=True, timeout=5,
+                    )
+                    logger.warning("Killed orphan whisper-server.exe via taskkill (no psutil)")
+                    killed = 1
+            if killed:
+                time.sleep(0.5)  # let the OS release the socket
+        except Exception as e:
+            logger.warning("Failed to kill orphan whisper-server.exe: %s", e)
 
     def _restart_server(self) -> None:
         """Kill and restart whisper-server after a timeout/crash."""

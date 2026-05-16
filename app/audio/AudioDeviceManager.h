@@ -112,6 +112,10 @@ private:
     int m_selectedIndex = -1;          // index dans m_devices
     QString m_lastError;
 
+    // Perf: cache des IDs RtAudio du dernier scan, pour fast-path dans
+    // onHealthCheckTimer() (skip getDeviceInfo() si la liste d'IDs n'a pas bougé).
+    std::vector<unsigned int> m_lastDeviceIds;
+
     // ── Health check ──
     QTimer m_healthTimer;
     QString m_audioStatus = "unknown"; // "healthy" | "down" | "unknown"

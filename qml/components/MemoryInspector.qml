@@ -10,6 +10,9 @@ import "../theme"
 // ═══════════════════════════════════════════════════════
 
 Rectangle {
+        Component.onDestruction: {
+            console.warn("[MEMORY] MemoryInspector détruit:", root)
+        }
     id: root
     color: Theme.bgPrimary
 

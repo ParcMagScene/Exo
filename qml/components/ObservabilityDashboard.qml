@@ -8,6 +8,9 @@ import "../theme"
 // ═══════════════════════════════════════════════════════
 
 Rectangle {
+        Component.onDestruction: {
+            console.warn("[MEMORY] ObservabilityDashboard détruit:", root)
+        }
     id: root
     color: Theme.bgPrimary
 
@@ -400,6 +403,40 @@ Rectangle {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: root.refreshLogs()
+                            }
+                        }
+                        Rectangle {
+                            width: copyLabel.implicitWidth + 12
+                            height: 22; radius: Theme.radiusSmall
+                            color: Theme.bgElevated
+                            border.width: 1; border.color: Theme.border
+
+                            Text {
+                                id: copyLabel
+                                anchors.centerIn: parent
+                                text: "📋 Copier tout"
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontTiny
+                                color: Theme.textSecondary
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    var lines = root.logs.map(function(entry) {
+                                        var ts = (entry.timestamp || "").substring(0,19)
+                                        var lvl = (entry.level || "INFO").toUpperCase()
+                                        var mod = entry.module || ""
+                                        var msg = entry.message || ""
+                                        return ts + " [" + lvl + "] " + (mod ? (mod + ": ") : "") + msg
+                                    })
+                                    var all = lines.join("\n")
+                                    if (Qt && Qt.application && Qt.application.clipboard) {
+                                        Qt.application.clipboard.setText(all)
+                                    } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                                        navigator.clipboard.writeText(all)
+                                    }
+                                }
                             }
                         }
                         Rectangle {

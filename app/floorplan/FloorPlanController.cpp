@@ -451,7 +451,7 @@ void FloorPlanController::savePlan(const QString &path)
     if (!m_model) return;
     QString savePath = path.isEmpty() ? m_currentPlanPath : path;
     if (savePath.isEmpty())
-        savePath = QStringLiteral("config/floorplan.json");
+        savePath = QStringLiteral("D:/EXO/config/floorplan.json");
     m_model->save(savePath);
     m_currentPlanPath = savePath;
     emit currentPlanPathChanged();

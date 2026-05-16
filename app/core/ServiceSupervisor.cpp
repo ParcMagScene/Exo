@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <algorithm>
 
 // ── Constantes de timing (ms) ────────────────────────
 static constexpr int QUICK_PROBE_TIMEOUT_MS   = 2000;  // 2s — probe si le service tourne déjà
@@ -173,23 +174,24 @@ void ServiceSupervisor::doLaunchProcess(const QString &name)
 
     // Variables d'environnement EXO
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    const QString ssd = qEnvironmentVariable("EXO_SSD_ROOT", QStringLiteral("D:/EXO"));
-    env.insert(QStringLiteral("EXO_WHISPER_MODELS"),  ssd + "/models/whisper");
+    QDir projectDir = QDir(QCoreApplication::applicationDirPath());
+    projectDir.cdUp(); projectDir.cdUp();
+    const QString ssd = qEnvironmentVariable("EXO_SSD_ROOT", projectDir.absolutePath());
+    env.insert(QStringLiteral("EXO_WHISPER_MODELS"),  "D:/EXO/models/whisper");
     env.insert(QStringLiteral("EXO_WHISPERCPP_BIN"),  ssd + "/whispercpp/build_vk/bin/Release");
-    env.insert(QStringLiteral("EXO_COSYVOICE_MODELS"), ssd + "/models/cosyvoice_fr");
     env.insert(QStringLiteral("EXO_FAISS_DIR"),        ssd + "/faiss/semantic_memory");
-    env.insert(QStringLiteral("EXO_WAKEWORD_MODELS"),  ssd + "/models/wakeword");
+    env.insert(QStringLiteral("EXO_WAKEWORD_MODELS"),  "D:/EXO/models/wakeword");
     env.insert(QStringLiteral("HF_HOME"),              ssd + "/cache/huggingface");
     env.insert(QStringLiteral("TRANSFORMERS_CACHE"),   ssd + "/cache/huggingface/hub");
     env.insert(QStringLiteral("EXO_SSD_ROOT"),         ssd);
     env.insert(QStringLiteral("EXO_FILES_DIR"),        ssd + "/files");
     env.insert(QStringLiteral("TORCH_HOME"),           ssd + "/cache/torch");
-    const QString pythonRoot = QDir(projectDir()).absoluteFilePath(QStringLiteral("python"));
+    const QString pythonRoot = QDir(projectDir.absolutePath()).absoluteFilePath(QStringLiteral("python"));
     const QString pythonPath = env.value(QStringLiteral("PYTHONPATH"));
     env.insert(QStringLiteral("PYTHONPATH"),
                pythonPath.isEmpty()
                    ? pythonRoot
-                   : pythonRoot + QDir::listSeparator() + pythonPath);
+                   : pythonRoot + QChar(QLatin1Char(';')) + pythonPath);
     proc->setProcessEnvironment(env);
 
     // Logs
@@ -271,7 +273,7 @@ void ServiceSupervisor::probeReadiness(const QString &name)
             }
         });
 
-    // Poll : réessayer la connexion WS toutes les 500ms
+    // Poll : réessayer la connexion WS avec backoff exponentiel (500ms -> 15s)
     connect(probe.poll, &QTimer::timeout, this,
         [this, name, url]() {
             auto it = m_probes.find(name);
@@ -280,6 +282,8 @@ void ServiceSupervisor::probeReadiness(const QString &name)
                 // open() fait destroySocket() en interne (disconnect signaux + abort + delete)
                 // Pas de close() ici : il provoque un wildcard warning Qt
                 it->client->open(url);
+                it->pollIntervalMs = std::min(15000, it->pollIntervalMs * 2);
+                it->poll->setInterval(it->pollIntervalMs);
             }
         });
 
@@ -295,10 +299,12 @@ void ServiceSupervisor::probeReadiness(const QString &name)
 void ServiceSupervisor::onReadinessConnected(const QString &name)
 {
     hLog() << "[Supervisor]" << name << "WebSocket connecté — attente message ready…";
-    // Arrêter le poll, on est connecté
+    // Arrêter le poll, on est connecté ; reset backoff pour la prochaine perte
     auto it = m_probes.find(name);
-    if (it != m_probes.end() && it->poll) {
-        it->poll->stop();
+    if (it != m_probes.end()) {
+        if (it->poll) it->poll->stop();
+        it->pollIntervalMs = 500;
+        if (it->poll) it->poll->setInterval(500);
     }
 }
 
@@ -309,6 +315,16 @@ void ServiceSupervisor::onReadinessMessage(const QString &name, const QString &m
 
     QJsonObject obj = doc.object();
     QString type = obj.value(QStringLiteral("type")).toString();
+
+    // Injection des métriques détaillées si présentes
+    auto &entry = m_registry.entry(name);
+    if (obj.contains("message"))        entry.message = obj.value("message").toString();
+    if (obj.contains("startupTimeMs"))  entry.startupTimeMs = obj.value("startupTimeMs").toVariant().toLongLong();
+    if (obj.contains("latencyMs"))      entry.latencyMs = obj.value("latencyMs").toVariant().toLongLong();
+    if (obj.contains("restarts"))       entry.restarts = obj.value("restarts").toInt();
+    if (obj.contains("lastHeartbeat"))  entry.lastHeartbeat = obj.value("lastHeartbeat").toVariant().toLongLong();
+    if (obj.contains("cpu"))            entry.cpu = obj.value("cpu").toDouble();
+    if (obj.contains("ram"))            entry.ram = obj.value("ram").toDouble();
 
     if (type == QLatin1String("ready")) {
         QString phaseStr = obj.value(QStringLiteral("phase")).toString();

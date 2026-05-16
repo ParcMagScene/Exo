@@ -64,7 +64,7 @@ Rectangle {
 
             Image {
                 anchors.horizontalCenter: parent.horizontalCenter
-                source: "qrc:/assets/icons/app/exo.svg"
+                source: "qrc:/qt/qml/RaspberryAssistant/assets/icons/app/exo.svg"
                 sourceSize.width: 72
                 sourceSize.height: 72
                 width: 72

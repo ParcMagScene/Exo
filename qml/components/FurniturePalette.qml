@@ -170,7 +170,7 @@ Rectangle {
             cellHeight: 76
             clip: true
 
-            model: palette.categories[palette.currentCategory].items
+            model: (palette.categories[palette.currentCategory] || { items: [] }).items
 
             delegate: Rectangle {
                 required property var modelData

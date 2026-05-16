@@ -1,5 +1,9 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
+
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+import os
+os.chdir("D:/EXO/")
 EXO v8 — SystemService (WebSocket)
 Port 8783 — Informations système pour l'agent autonome
 
@@ -18,7 +22,10 @@ Protocol WebSocket :
 """
 
 import asyncio
-import json
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
 import logging
 import os
 import platform
@@ -44,6 +51,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [System] %(message)s
 log = logging.getLogger("system_service")
 
 PORT = 8783
+
+# Log d'amorçage immédiat pour diagnostic
+log.info("=== EXO SYSTEM_SERVICE STARTUP ===")
+try:
+    log.handlers[0].flush()
+except Exception:
+    pass
 
 
 class SystemService:

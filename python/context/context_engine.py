@@ -1,5 +1,9 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
+
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+import os
+os.chdir("D:/EXO/")
 EXO v10 — ContextEngine v3 Server (WebSocket)
 Port 8777 — Conscience contextuelle dynamique enrichie
 
@@ -25,8 +29,13 @@ Protocol WebSocket :
 """
 
 import asyncio
-import json
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
 import logging
+import os
+from pathlib import Path
 import sys
 import time
 from datetime import datetime, timezone
@@ -41,8 +50,32 @@ except ImportError:
 from shared.singleton_guard import ensure_single_instance
 from shared.base_service import init_v9
 
+
+# --- Logging EXO centralisé (identique C++) ---
+def _get_exo_logfile():
+    # Correction : tous les logs doivent aller dans D:/EXO/logs/
+    log_dir = os.environ.get("EXO_LOGS_DIR", "D:/EXO/logs")
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    ts = os.environ.get("EXO_SESSION_TIMESTAMP")
+    if not ts:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(log_dir, f"exo_{ts}.log")
+
+logfile = _get_exo_logfile()
+_file_handler = logging.FileHandler(logfile, encoding="utf-8", delay=False)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [Context] %(message)s"))
+_file_handler.flush = _file_handler.stream.flush  # flush explicite
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [Context] %(message)s")
 log = logging.getLogger("context_engine")
+log.addHandler(_file_handler)
+log.propagate = True
+
+# Log d'amorçage immédiat pour diagnostic
+log.info("=== EXO CONTEXT_ENGINE STARTUP ===")
+_file_handler.flush()
 
 PORT = 8777
 MAX_EVENTS = 200
@@ -422,7 +455,13 @@ class ContextEngine:
 
 async def handle_client(ws, engine: ContextEngine) -> None:
     log.info("Context client connected")
-    await ws.send(json.dumps({"type": "ready", "service": "context_engine"}))
+    await ws.send(json.dumps({
+        "type": "ready",
+        "service": "context_engine",
+        "model": "n/a",
+        "device": "n/a",
+        "backend": "n/a"
+    }))
 
     try:
         async for raw in ws:

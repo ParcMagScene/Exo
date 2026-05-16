@@ -1,87 +1,20 @@
-# 🤖 EXO — Assistant Vocal Local Premium
+# Migration automatique de l’arborescence EXO
 
-**Version 30.0** | Mai 2026
+Depuis la migration 2026-05, toute l’arborescence EXO est unifiée directement sous D:/EXO/.
 
-![Qt 6.9.3](https://img.shields.io/badge/Qt-6.9.3-green?logo=qt)
-![C++17](https://img.shields.io/badge/C++-17-blue?logo=cplusplus)
-![Python 3.13](https://img.shields.io/badge/Python-3.13-yellow?logo=python)
-![Whisper.cpp](https://img.shields.io/badge/Whisper.cpp-small%20Vulkan%20int8-orange)
-![CosyVoice2](https://img.shields.io/badge/CosyVoice2--0.5B-TTS%20Neural-green)
-![Silero VAD](https://img.shields.io/badge/Silero-VAD%20Neural-purple)
-![FAISS](https://img.shields.io/badge/FAISS-Mémoire%20Vectorielle-red)
-![OpenWakeWord](https://img.shields.io/badge/OpenWakeWord-Wake%20Word-orange)
-![Claude API](https://img.shields.io/badge/Claude-Sonnet-blue?logo=anthropic)
-![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Integration-41bdf5?logo=homeassistant)
-![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows)
+1. Exécutez le script PowerShell suivant depuis D:/EXO/ :
 
----
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "migrate_project_to_root.ps1"
 
-## Présentation
+2. Vérifiez le journal de migration dans D:/EXO/logs/migration.log
+3. Supprimez l’ancien dossier project/ uniquement après validation complète (aucun code ne doit référencer project/).
 
-EXO est un assistant vocal intelligent 100 % local (sauf LLM Claude API), conçu pour tourner en temps réel sur un PC desktop. Il combine un moteur C++/Qt haute performance avec **25 microservices Python** spécialisés, communiquant par WebSocket.
-
-**Pourquoi EXO ?**
-- 🎙 **Voix naturelle** — CosyVoice2‑0.5B (CUDA, streaming 24 kHz) + Whisper.cpp (Vulkan GPU, small, beam=1, int8)
-- 🧠 **Mémoire persistante** — 3 couches (court/long/sémantique) + FAISS vectoriel
-- 🏠 **Domotique complète** — Home Assistant, Samsung SmartThings, Voltalis, Echo, caméras
-- 🎨 **Interface premium** — QML 10 pages + 56 composants style VS Code / Fluent Design
-- ⚡ **Ultra-Low Latency** — ContextCache, LatencyMetrics, warmup/keepalive ClaudeAPI, STT greedy decoding
-- 🛡️ **Observabilité & Résilience** — LogManager, MetricsManager, TraceManager, ErrorManager, CircuitBreaker, Stability Test Runner + autoheal
-
----
-
-## Architecture générale
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                          EXO Assistant v30.0                            │
-├──────────────┬───────────────────────────────────────────────────────────┤
-│              │                                                           │
-│  Interface   │   ┌─────────────┐    ┌────────────────────────────┐      │
-│  QML (10 p.) │   │ Audio Input │───→│ VoicePipeline (C++ FSM)   │      │
-│  56 compos.  │   │  (RtAudio   │    │  DSP → VAD → WakeWord     │      │
-│              │   │   WASAPI)   │    │       → STT stream        │      │
-│              │   └─────────────┘    └───────────┬────────────────┘      │
-│              │                                   │                      │
-│              │                     ┌─────────────▼───────────────┐      │
-│              │                     │     ClaudeAPI (SSE)         │      │
-│              │                     │  Function Calling + NLU     │      │
-│              │                     └─────────────┬───────────────┘      │
-│              │                                   │                      │
-│              │                     ┌─────────────▼───────────────┐      │
-│              │                     │  TTSManager (C++ DSP)       │      │
-│              │                     │  EQ → Compressor → Norm     │      │
-│              │                     │  → Fade → Anti-clip → Out   │      │
-│              │                     └─────────────────────────────┘      │
-├──────────────┴───────────────────────────────────────────────────────────┤
-│                    25 Microservices Python (WebSocket)                    │
-│                                                                          │
-│  ┌── Core ──────────────────────────────────────────────────────────┐    │
-│  │ Orch:8765  STT:8766  TTS:8767  VAD:8768  Wake:8770  Mem:8771   │    │
-│  │ NLU:8772                                                        │    │
-│  ├── Intelligence ─────────────────────────────────────────────────┤    │
-│  │ WebSearch:8773  News:8774  Knowledge:8775  Tools:8776           │    │
-│  │ Context:8777  Planner:8778  Executor:8779  Verifier:8780        │    │
-│  ├── Outils ───────────────────────────────────────────────────────┤    │
-│  │ FileService:8781  Calendar:8782  System:8783                    │    │
-│  ├── Domotique ────────────────────────────────────────────────────┤    │
-│  │ HomeGraph:8784  Domotic:8785  Camera:8786  Samsung:8787         │    │
-│  │ Voltalis:8788  Echo:8789                                        │    │
-│  ├── Réseau ───────────────────────────────────────────────────────┤    │
-│  │ NetworkMap:8790                                                  │    │
-│  └─────────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Pipeline vocal
-
-```
+Ce script déplace tous les dossiers/fichiers de project/ à la racine D:/EXO/, crée les dossiers cibles, vérifie la copie et journalise chaque opération.
+...existing code...
 Micro → RtAudio WASAPI → DSP (noisereduce) → VAD (Silero :8768)
   → WakeWord (OpenWakeWord :8770) → STT (Whisper.cpp small Vulkan :8766)
   → NLU (:8772) → Claude API (SSE + Function Calling)
-  → TTS (CosyVoice2‑0.5B CUDA :8767) → TTSManager (C++ DSP) → Speaker
+  → TTS (Orpheus 3B FR GGUF Q8 CUDA :8767) → TTSManager (C++ DSP) → Speaker
 ```
 
 | Étape | Technologie | Latence cible |
@@ -90,7 +23,7 @@ Micro → RtAudio WASAPI → DSP (noisereduce) → VAD (Silero :8768)
 | WakeWord | OpenWakeWord | < 100 ms |
 | STT | Whisper.cpp small, Vulkan, beam=1, int8 | < 2 s |
 | LLM | Claude Sonnet SSE | first token < 500 ms |
-| TTS | CosyVoice2‑0.5B, CUDA, streaming | first chunk < 1.5 s |
+| TTS | Orpheus 3B FR GGUF Q8, CUDA, streaming | first chunk < 1.5 s |
 | DSP | EQ → Compressor → Normalizer → Fade | < 5 ms |
 
 ### État actuel des performances (v28)
@@ -99,7 +32,7 @@ Les latences ci‑dessus représentent les objectifs cibles.
 Les mesures actuelles observées sur la configuration de développement sont :
 
 - STT Whisper.cpp small Vulkan : ~18 s pour 3.2 s d'audio (optimisation en cours)
-- TTS CosyVoice2‑0.5B : first chunk ~3 s, total ~10 s (optimisation en cours)
+- TTS Orpheus 3B FR GGUF Q8 : first chunk ~1.0–1.5 s, RTF ~1.5 (CUDA RTX 3070)
 
 Ces valeurs seront progressivement alignées avec les objectifs (< 2 s STT, < 1.5 s TTS).
 
@@ -113,7 +46,7 @@ Ces valeurs seront progressivement alignées avec les objectifs (< 2 s STT, < 1.
 |---------|------|-------------|------|
 | **Orchestrator** | 8765 | Python 3.13 (.venv) | GUI WebSocket, bridge entre tous les services |
 | **STT** | 8766 | Whisper.cpp (Vulkan, small, beam=1, int8) | Reconnaissance vocale GPU temps réel |
-| **TTS** | 8767 | CosyVoice2‑0.5B (CUDA) | Synthèse vocale neurale, streaming PCM16 24 kHz |
+| **TTS** | 8767 | Orpheus 3B FR GGUF Q8 (CUDA, llama.cpp + SNAC) | Synthèse vocale neurale, streaming PCM16 24 kHz |
 | **VAD** | 8768 | Silero VAD | Détection d'activité vocale neurale |
 | **WakeWord** | 8770 | OpenWakeWord | Détection du mot-clé « EXO » |
 | **Memory** | 8771 | FAISS + SentenceTransformers | Mémoire sémantique vectorielle |
@@ -306,7 +239,7 @@ python -m venv .venv_stt_tts
 .\.venv_stt_tts\Scripts\Activate.ps1
 pip install websockets numpy soundfile "transformers>=4.40,<4.50"
 pip install "torch==2.4.1" "torchaudio==2.4.1" --index-url https://download.pytorch.org/whl/cu121
-pip install cosyvoice
+pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
 pip install silero-vad onnxruntime noisereduce openwakeword faiss-cpu sentence-transformers
 ```
 
@@ -334,7 +267,7 @@ Stockés sur `D:\EXO\` :
 | Dossier | Contenu |
 |---------|---------|
 | `D:\EXO\models\whisper` | Modèles Whisper.cpp (ggml-small.bin) |
-| `D:\EXO\models\cosyvoice` | Modèles CosyVoice2‑0.5B |
+| `D:\EXO\models\orpheus_fr_gguf` | Modèle Orpheus 3B FR GGUF Q8 + SNAC |
 | `D:\EXO\models\wakeword` | Modèles OpenWakeWord |
 | `D:\EXO\faiss\semantic_memory` | Index FAISS |
 | `D:\EXO\cache\huggingface` | Cache HuggingFace |
@@ -360,8 +293,8 @@ Ou via VS Code : `Ctrl+Shift+P` → `Tasks: Run Task` → `launch_all`.
 # STT Whisper.cpp small Vulkan (port 8766)
 .\.venv_stt_tts\Scripts\python.exe python/stt/stt_server.py --backend whispercpp --model small --beam-size 1 --device vulkan --compute-type int8
 
-# TTS CosyVoice2-0.5B (port 8767)
-.\.venv_stt_tts\Scripts\python.exe python/tts/tts_server.py --lang fr --streaming --latency-optimized
+# TTS Orpheus 3B FR GGUF Q8 (port 8767)
+.\services\orpheus\venv\Scripts\python.exe services/orpheus/server_ws.py
 
 # VAD Silero (port 8768)
 .\.venv_stt_tts\Scripts\python.exe python/vad/vad_server.py
@@ -444,7 +377,7 @@ Les 25 services sont définis dans `config/services.json` avec ports, venvs et a
 | Problème | Solution |
 |----------|----------|
 | STT lent (> 5 s) | Vérifier `beam_size=1` dans `assistant.conf` et `--device vulkan --compute-type int8` |
-| TTS pas de son | Vérifier que le modèle CosyVoice2 est dans `D:\EXO\models\cosyvoice` et CUDA disponible |
+| TTS pas de son | Vérifier que le modèle Orpheus est dans `D:\EXO\models\orpheus_fr_gguf` et CUDA disponible (venv `services\orpheus\venv`) |
 | Service DOWN | Lancer `python python/test/exo_test_runner.py --autoheal` |
 | HealthCheck flapping | `WS_PING_INTERVAL=None` dans `base_service.py` (déjà corrigé) |
 | Erreur Vulkan STT | Vérifier `vulkaninfo` et que whisper-server.exe est compilé avec Vulkan |
@@ -484,7 +417,7 @@ EXO/
 ├── python/                        25 Microservices Python
 │   ├── orchestrator/               exo_server.py (8765)
 │   ├── stt/                        stt_server.py + whisper_cpp.py (8766)
-│   ├── tts/                        tts_server.py + cosyvoice_engine.py (8767)
+│   ├── tts/                        tts_server.py (legacy stub) — serveur actif : services/orpheus/server_ws.py (8767)
 │   ├── vad/                        vad_server.py (8768)
 │   ├── wakeword/                   wakeword_server.py (8770)
 │   ├── memory/                     memory_server.py (8771)
@@ -530,7 +463,7 @@ EXO/
 ## Roadmap
 
 ### ✅ Réalisé (v28)
-- **CosyVoice2‑0.5B** — TTS neural streaming CUDA, remplacement XTTS v2
+- **Orpheus 3B FR GGUF Q8** — TTS neural streaming CUDA (llama.cpp + SNAC), moteur unique (politique 2026-05-03)
 - **STT beam=1** — Whisper.cpp small, Vulkan GPU, int8, greedy decoding (~60 % plus rapide)
 - **25 microservices Python** — architecture complète (core, intelligence, outils, domotique, réseau)
 - **Stability Test Runner** — diagnostic + autoheal automatique des services
@@ -583,4 +516,4 @@ Ce projet est sous licence **MIT**. Voir [LICENSE](LICENSE) pour les détails.
 
 ---
 
-**EXO** — C++ / Qt 6.9.3 · Python 3.13 · CosyVoice2‑0.5B · Whisper.cpp (Vulkan GPU) · FAISS · Silero · OpenWakeWord · Framework Cognitif
+**EXO** — C++ / Qt 6.9.3 · Python 3.13 · Orpheus 3B FR GGUF Q8 · Whisper.cpp (Vulkan GPU) · FAISS · Silero · OpenWakeWord · Framework Cognitif

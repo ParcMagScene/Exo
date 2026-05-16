@@ -35,13 +35,23 @@ try:
         return _orjson.dumps(obj, option=opts).decode()
 
 except ImportError:
-    import json as _json
+    try:
+        import ujson as _ujson  # v6.0 perf : 3-5x plus rapide que stdlib (Python free-threaded)
 
-    def json_loads(raw):
-        return _json.loads(raw)
+        def json_loads(raw):
+            return _ujson.loads(raw)
 
-    def json_dumps(obj, **kw):
-        return _json.dumps(obj, ensure_ascii=False, default=str, **kw)
+        def json_dumps(obj, **kw):
+            return _ujson.dumps(obj, **kw)
+
+    except ImportError:
+        import json as _json
+
+        def json_loads(raw):
+            return _json.loads(raw)
+
+        def json_dumps(obj, **kw):
+            return _json.dumps(obj, ensure_ascii=False, default=str, **kw)
 
 
 # ── WS defaults ──────────────────────────────────────────────
@@ -50,6 +60,7 @@ WS_PING_TIMEOUT  = 10   # seconds to wait for pong before closing
 WS_MAX_SIZE      = 10 * 1024 * 1024  # 10 MB max message size
 WS_RETRY_COUNT   = 3
 WS_RETRY_BACKOFF = 0.2  # seconds (doubled each attempt)
+WS_RETRY_MAX_BACKOFF = 0.4  # v6.0 perf audit : cap exp backoff (voice pipeline must not stall)
 CB_FAILURE_THRESHOLD = 3
 CB_COOLDOWN_S = 15.0
 
@@ -139,8 +150,9 @@ class BaseService:
     # ── retry send ───────────────────────────────────────────────
     async def retry_send(self, ws, data: str | bytes, *,
                          retries: int = WS_RETRY_COUNT,
-                         backoff: float = WS_RETRY_BACKOFF) -> bool:
-        """Send with retry + exponential backoff. Returns True on success."""
+                         backoff: float = WS_RETRY_BACKOFF,
+                         max_backoff: float = WS_RETRY_MAX_BACKOFF) -> bool:
+        """Send with retry + exponential backoff (capped). Returns True on success."""
         for attempt in range(retries + 1):
             try:
                 await ws.send(data)
@@ -149,7 +161,10 @@ class BaseService:
             except Exception as exc:
                 self.circuit_breaker.record_failure()
                 if attempt < retries:
-                    await asyncio.sleep(backoff * (2 ** attempt))
+                    # v6.0 perf audit : cap exp backoff a max_backoff (default 0.4s)
+                    # pour eviter un stall de 0.8s/1.6s sur le pipeline vocal.
+                    delay = min(backoff * (2 ** attempt), max_backoff)
+                    await asyncio.sleep(delay)
                 else:
                     self.log.warning("retry_send exhausted (%d attempts): %s",
                                      retries + 1, exc)

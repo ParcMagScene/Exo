@@ -1,3 +1,4 @@
+# NOTE : Depuis la migration 2026-05, tous les chemins EXO sont sous D:/EXO/<nom>/ (voir docs/index.md).
 # Graphe de dépendances C++
 
 > Auto-généré par `auto_maintain.py` — 2026-04-12

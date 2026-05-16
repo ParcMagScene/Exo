@@ -33,6 +33,7 @@ except ImportError:
     print("websockets not installed – pip install websockets>=12", file=sys.stderr)
     sys.exit(1)
 
+    # Tous les chemins doivent être relatifs à D:/EXO/ (post-migration)
 # ── Service registry (mirrors config/services.json) ─────────────
 SERVICES: dict[str, int] = {
     "stt":       8766,
@@ -331,7 +332,7 @@ def detect_down_services(report: TestReport) -> list[str]:
 
 async def start_missing_services(down_services: list[str]) -> list[str]:
     """Start DOWN services, return list of services that were launched."""
-    project_root = Path(__file__).resolve().parent.parent.parent
+    project_root = Path("D:/EXO/")
     started: list[str] = []
 
     for name in down_services:
@@ -365,7 +366,7 @@ async def start_missing_services(down_services: list[str]) -> list[str]:
             env = dict(__import__("os").environ)
             env.setdefault("EXO_WHISPER_MODELS", r"D:\EXO\models\whisper")
             env.setdefault("EXO_WHISPERCPP_BIN", r"D:\EXO\whispercpp\build_vk\bin\Release")
-            env.setdefault("EXO_COSYVOICE_MODELS", r"D:\EXO\models\cosyvoice")
+            env.setdefault("EXO_ORPHEUS_MODELS", r"D:\EXO\models\orpheus_fr_gguf")
             env.setdefault("EXO_FAISS_DIR", r"D:\EXO\faiss\semantic_memory")
             env.setdefault("EXO_WAKEWORD_MODELS", r"D:\EXO\models\wakeword")
             env.setdefault("HF_HOME", r"D:\EXO\cache\huggingface")
@@ -420,7 +421,7 @@ def _port_is_open(port: int) -> bool:
 async def main_loop(max_loops: int, timeout_ms: int, autoheal: bool = False) -> bool:
     """Run tests in a loop until stable or max_loops reached."""
     flap_tracker = FlapTracker()
-    out_dir = Path("logs/stability")
+    out_dir = Path("D:/EXO/logs/stability")
 
     mode = "autoheal" if autoheal else "standard"
     print(_cyan(f"\n  EXO Stability Test Runner  [{mode}]"))

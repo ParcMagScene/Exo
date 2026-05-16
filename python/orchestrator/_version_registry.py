@@ -82,8 +82,8 @@ def _init_v11(agent_mgr: Any) -> dict:
     from self_diagnosis_engine import SelfDiagnosisEngine
     from optimization_engine import OptimizationEngine
     from auto_tuning_engine import AutoTuningEngine
-    from meta_planner import MetaPlanner
-    from meta_supervisor import MetaSupervisor
+    from _archived.meta_planner import MetaPlanner
+    from _archived.meta_supervisor import MetaSupervisor
     from auto_explanation import AutoExplanation
 
     meta_memory = MetaMemory()
@@ -118,11 +118,10 @@ def _init_v11(agent_mgr: Any) -> dict:
 def _init_v12(v11: dict) -> dict:
     from self_reflection_engine import SelfReflectionEngine
     from meta_reasoning_engine import MetaReasoningEngine
-    from meta_planner_v2 import MetaPlannerV2
+    from _archived.meta_planner_v2 import MetaPlannerV2
     from meta_verifier import MetaVerifier
     from self_consistency_engine import SelfConsistencyEngine
-    from meta_supervisor_v2 import MetaSupervisorV2
-    from explainability_engine_v2 import ExplainabilityEngineV2
+    from _archived.meta_supervisor_v2 import MetaSupervisorV2
 
     meta_memory = v11["meta_memory"]
     governance = v11["governance"]
@@ -134,7 +133,6 @@ def _init_v12(v11: dict) -> dict:
     consistency = SelfConsistencyEngine(meta_memory, verifier, governance)
     supervisor_v2 = MetaSupervisorV2(
         meta_memory, v11["supervisor"], reflection, meta_reasoning, governance)
-    explainability_v2 = ExplainabilityEngineV2(meta_memory, v11["explanation"])
 
     return {
         "reflection": reflection,
@@ -143,7 +141,6 @@ def _init_v12(v11: dict) -> dict:
         "verifier": verifier,
         "consistency": consistency,
         "supervisor_v2": supervisor_v2,
-        "explainability_v2": explainability_v2,
     }
 
 
@@ -154,8 +151,7 @@ def _init_v13(v11: dict, v12: dict) -> dict:
     from multi_scenario_engine import MultiScenarioEngine
     from temporal_coherence_engine import TemporalCoherenceEngine
     from anticipation_engine import AnticipationEngine
-    from explainability_engine_v3 import ExplainabilityEngineV3
-    from meta_supervisor_v3 import MetaSupervisorV3
+    from _archived.meta_supervisor_v3 import MetaSupervisorV3
 
     meta_memory = v11["meta_memory"]
     governance = v11["governance"]
@@ -166,8 +162,6 @@ def _init_v13(v11: dict, v12: dict) -> dict:
     multi_scenario = MultiScenarioEngine(meta_memory, simulation_eng, governance)
     temporal_coherence = TemporalCoherenceEngine(meta_memory, future_planner)
     anticipation = AnticipationEngine(meta_memory, prediction_eng, governance)
-    explainability_v3 = ExplainabilityEngineV3(
-        meta_memory, v12["explainability_v2"])
     supervisor_v3 = MetaSupervisorV3(
         meta_memory, v12["supervisor_v2"], simulation_eng, governance)
 
@@ -178,7 +172,6 @@ def _init_v13(v11: dict, v12: dict) -> dict:
         "multi_scenario": multi_scenario,
         "temporal": temporal_coherence,
         "anticipation": anticipation,
-        "explainability_v3": explainability_v3,
         "supervisor_v3": supervisor_v3,
     }
 
@@ -190,8 +183,7 @@ def _init_v14(v11: dict, v13: dict) -> dict:
     from conflict_resolver import ConflictResolver
     from cognitive_orchestrator import CognitiveOrchestrator
     from distributed_consistency_engine import DistributedConsistencyEngine
-    from meta_supervisor_v4 import MetaSupervisorV4
-    from explainability_engine_v4 import ExplainabilityEngineV4
+    from _archived.meta_supervisor_v4 import MetaSupervisorV4
 
     meta_memory = v11["meta_memory"]
     governance = v11["governance"]
@@ -209,8 +201,6 @@ def _init_v14(v11: dict, v13: dict) -> dict:
     supervisor_v4 = MetaSupervisorV4(
         meta_memory, registry, msg_bus, consistency_eng,
         v13["supervisor_v3"], governance)
-    explainability_v4 = ExplainabilityEngineV4(
-        meta_memory, registry, v13["explainability_v3"])
 
     return {
         "messaging_bus": msg_bus,
@@ -219,7 +209,6 @@ def _init_v14(v11: dict, v13: dict) -> dict:
         "orchestrator": cog_orchestrator,
         "consistency": consistency_eng,
         "supervisor_v4": supervisor_v4,
-        "explainability_v4": explainability_v4,
     }
 
 
@@ -232,7 +221,6 @@ def _init_v15(v11: dict, agent_mgr: Any) -> dict:
     from prospective_engine import ProspectiveEngine
     from distributed_cognition_layer import DistributedCognitionLayer
     from global_supervisor_v5 import GlobalSupervisorV5
-    from explainability_engine_v5 import ExplainabilityEngineV5
 
     meta_memory = v11["meta_memory"]
     governance = v11["governance"]
@@ -247,8 +235,6 @@ def _init_v15(v11: dict, agent_mgr: Any) -> dict:
         meta_memory, governance, agent_mgr)
     supervisor_v5 = GlobalSupervisorV5(
         meta_memory, governance, meta_cognition, distrib_cognition)
-    explainability_v5 = ExplainabilityEngineV5(
-        meta_memory, knowledge_graph, inference_eng)
 
     return {
         "expert_system": expert_system,
@@ -259,7 +245,6 @@ def _init_v15(v11: dict, agent_mgr: Any) -> dict:
         "prospective": prospective,
         "distributed": distrib_cognition,
         "supervisor_v5": supervisor_v5,
-        "explainability_v5": explainability_v5,
     }
 
 
@@ -271,7 +256,7 @@ def _init_v16(v11: dict, v14: dict, v15: dict) -> dict:
     from emergent_collaboration_bus import EmergentCollaborationBus
     from emergent_reasoning_engine import EmergentReasoningEngine
     from self_regulation_engine import SelfRegulationEngine
-    from explainability_engine_v6 import ExplainabilityEngineV6
+    from explainability_engine import ExplainabilityEngine
 
     meta_memory = v11["meta_memory"]
     governance = v11["governance"]
@@ -289,8 +274,17 @@ def _init_v16(v11: dict, v14: dict, v15: dict) -> dict:
         v15["knowledge_graph"], v15["inference"])
     self_regulation = SelfRegulationEngine(
         cog_governor, cognitive_audit, initiative_proto, meta_memory)
-    explainability_v6 = ExplainabilityEngineV6(
-        meta_memory, v15["explainability_v5"], cognitive_audit)
+
+    # Façade unifiée v2..v6 (instanciée une fois v16 chargé : tous les
+    # collaborateurs sont enfin disponibles).
+    explainability = ExplainabilityEngine(
+        meta_memory=meta_memory,
+        knowledge_graph=v15["knowledge_graph"],
+        inference_eng=v15["inference"],
+        autoexplanation=v11["explanation"],
+        registry=v14["registry"],
+        audit_log=cognitive_audit,
+    )
 
     return {
         "audit_log": cognitive_audit,
@@ -300,7 +294,7 @@ def _init_v16(v11: dict, v14: dict, v15: dict) -> dict:
         "collaboration_bus": collab_bus,
         "emergent_reasoning": emergent_reasoning,
         "self_regulation": self_regulation,
-        "explainability_v6": explainability_v6,
+        "explainability": explainability,
     }
 
 

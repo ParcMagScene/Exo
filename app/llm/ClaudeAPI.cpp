@@ -435,12 +435,14 @@ void ClaudeAPI::processStreamChunk(const QByteArray &chunk)
         if (lineBytes.endsWith('\r'))
             lineBytes.chop(1);
 
-        QString line = QString::fromUtf8(lineBytes);
-        processSSELine(line);
+        // Perf: garde QByteArray, évite QString::fromUtf8 sur chaque ligne
+        // (la majorité des lignes sont des deltas traités par le fast-path,
+        // qui réopère sur les octets bruts).
+        processSSELine(lineBytes);
     }
 }
 
-void ClaudeAPI::processSSELine(const QString &line)
+void ClaudeAPI::processSSELine(const QByteArray &line)
 {
     // Ligne vide = fin d'un événement SSE (pas d'action ici,
     // on traite les données au fur et à mesure)
@@ -450,17 +452,22 @@ void ClaudeAPI::processSSELine(const QString &line)
     }
 
     // "event: xxx"
-    if (line.startsWith(QLatin1String("event: "))) {
-        m_currentEventType = line.mid(7).trimmed();
+    if (line.startsWith("event: ")) {
+        m_currentEventType = QString::fromUtf8(line.mid(7)).trimmed();
         return;
     }
 
     // "data: {...}"
-    if (line.startsWith(QLatin1String("data: "))) {
-        QString dataStr = line.mid(6);
+    if (line.startsWith("data: ")) {
+        // Perf P0-1: fast-path pour content_block_delta/text_delta — ~85%
+        // des chunks SSE en streaming. Évite QJsonDocument::fromJson +
+        // QJsonObject (~2–5 ms par chunk × ~50 chunks = 100–500 ms/réponse).
+        const QByteArray dataBytes = line.mid(6);
+        if (tryFastTextDelta(dataBytes))
+            return;
 
         QJsonParseError err;
-        QJsonDocument doc = QJsonDocument::fromJson(dataStr.toUtf8(), &err);
+        QJsonDocument doc = QJsonDocument::fromJson(dataBytes, &err);
 
         if (err.error != QJsonParseError::NoError) {
             // Pas forcément une erreur — certains événements n'ont pas de JSON
@@ -469,6 +476,148 @@ void ClaudeAPI::processSSELine(const QString &line)
 
         processSSEEvent(m_currentEventType, doc.object());
     }
+}
+
+// ─────────────────────────────────────────────────────
+//  Fast-path : extraction directe d'un content_block_delta
+//  text_delta sans parser le JSON complet.
+//
+//  Forme attendue (générée par l'API Anthropic) :
+//  {"type":"content_block_delta","index":N,
+//   "delta":{"type":"text_delta","text":"..."}}
+//
+//  Toute déviation (input_json_delta, champs additionnels,
+//  réordonnancement) → renvoie false → slow path JSON complet.
+// ─────────────────────────────────────────────────────
+bool ClaudeAPI::tryFastTextDelta(const QByteArray &data)
+{
+    static const QByteArray CBD_PREFIX =
+        QByteArrayLiteral("{\"type\":\"content_block_delta\"");
+    static const QByteArray DELTA_TEXT_PREFIX =
+        QByteArrayLiteral("\"delta\":{\"type\":\"text_delta\",\"text\":\"");
+
+    if (!data.startsWith(CBD_PREFIX))
+        return false;
+
+    // index
+    int idxPos = data.indexOf("\"index\":", CBD_PREFIX.size());
+    if (idxPos < 0) return false;
+    int p = idxPos + 8;
+    int idxEnd = data.indexOf(',', p);
+    if (idxEnd < 0) return false;
+    bool ok = false;
+    int index = QByteArray::fromRawData(data.constData() + p, idxEnd - p)
+                    .trimmed().toInt(&ok);
+    if (!ok || index < 0 || index > 100) return false;
+
+    // delta:{type:text_delta,text:"..."
+    int dpos = data.indexOf(DELTA_TEXT_PREFIX, idxEnd);
+    if (dpos < 0) return false;            // pas un text_delta
+    p = dpos + DELTA_TEXT_PREFIX.size();
+
+    const char *d = data.constData();
+    const int n = data.size();
+
+    QByteArray buf;
+    buf.reserve(qMax(16, n - p));
+
+    while (p < n) {
+        unsigned char c = static_cast<unsigned char>(d[p]);
+        if (c == '"') break;                // fin de la string text
+        if (c == '\\') {
+            if (p + 1 >= n) return false;
+            char e = d[p + 1];
+            switch (e) {
+                case '"':  buf.append('"');  p += 2; break;
+                case '\\': buf.append('\\'); p += 2; break;
+                case '/':  buf.append('/');  p += 2; break;
+                case 'b':  buf.append('\b'); p += 2; break;
+                case 'f':  buf.append('\f'); p += 2; break;
+                case 'n':  buf.append('\n'); p += 2; break;
+                case 'r':  buf.append('\r'); p += 2; break;
+                case 't':  buf.append('\t'); p += 2; break;
+                case 'u': {
+                    if (p + 6 > n) return false;
+                    bool uok = false;
+                    uint cp = QByteArray::fromRawData(d + p + 2, 4)
+                                  .toUInt(&uok, 16);
+                    if (!uok) return false;
+                    p += 6;
+                    // Paire de surrogates UTF-16
+                    if (cp >= 0xD800 && cp <= 0xDBFF) {
+                        if (p + 6 > n || d[p] != '\\' || d[p + 1] != 'u')
+                            return false;
+                        bool uok2 = false;
+                        uint cp2 = QByteArray::fromRawData(d + p + 2, 4)
+                                       .toUInt(&uok2, 16);
+                        if (!uok2 || cp2 < 0xDC00 || cp2 > 0xDFFF)
+                            return false;
+                        cp = 0x10000 + ((cp - 0xD800) << 10) + (cp2 - 0xDC00);
+                        p += 6;
+                    } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                        return false;       // surrogate bas isolé
+                    }
+                    // Encodage UTF-8
+                    if (cp < 0x80) {
+                        buf.append(static_cast<char>(cp));
+                    } else if (cp < 0x800) {
+                        buf.append(static_cast<char>(0xC0 | (cp >> 6)));
+                        buf.append(static_cast<char>(0x80 | (cp & 0x3F)));
+                    } else if (cp < 0x10000) {
+                        buf.append(static_cast<char>(0xE0 | (cp >> 12)));
+                        buf.append(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                        buf.append(static_cast<char>(0x80 | (cp & 0x3F)));
+                    } else {
+                        buf.append(static_cast<char>(0xF0 | (cp >> 18)));
+                        buf.append(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+                        buf.append(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                        buf.append(static_cast<char>(0x80 | (cp & 0x3F)));
+                    }
+                    break;
+                }
+                default:
+                    return false;           // séquence d'échappement inconnue
+            }
+        } else if (c < 0x20) {
+            return false;                   // caractère de contrôle brut illégal
+        } else {
+            buf.append(static_cast<char>(c));
+            ++p;
+        }
+    }
+
+    if (p >= n) return false;               // string non terminée
+
+    // Suffixe strict : `"` puis `}` (fin delta) puis `}` (fin envelope)
+    if (p + 3 > n) return false;
+    if (d[p] != '"' || d[p + 1] != '}' || d[p + 2] != '}') return false;
+
+    QString text = QString::fromUtf8(buf);
+    applyTextDelta(index, text);
+    return true;
+}
+
+void ClaudeAPI::applyTextDelta(int index, const QString &text)
+{
+    if (index < 0 || index >= m_contentBlocks.size()) return;
+
+    ContentBlock &block = m_contentBlocks[index];
+    block.text += text;
+    m_accumulatedText += text;
+    m_sentenceBuffer += text;
+
+    // First token event
+    if (m_accumulatedText.length() == text.length()) {
+        LatencyMetrics::instance()->markLlmFirstToken();
+        PIPELINE_EVENT(PipelineModule::Claude, EventType::FirstToken,
+                       {{"token", text.left(20)}});
+    }
+
+    // Émettre le token en temps réel
+    emit partialResponse(text);
+
+    // Sentence splitting : émettre les phrases complètes pour TTS
+    trySplitSentences();
 }
 
 void ClaudeAPI::processSSEEvent(const QString &eventType,
@@ -561,23 +710,8 @@ void ClaudeAPI::handleContentBlockDelta(const QJsonObject &data)
     ContentBlock &block = m_contentBlocks[index];
 
     if (deltaType == QLatin1String("text_delta")) {
-        QString text = delta[QStringLiteral("text")].toString();
-        block.text += text;
-        m_accumulatedText += text;
-        m_sentenceBuffer += text;
-
-        // First token event
-        if (m_accumulatedText.length() == text.length()) {
-            LatencyMetrics::instance()->markLlmFirstToken();
-            PIPELINE_EVENT(PipelineModule::Claude, EventType::FirstToken,
-                           {{"token", text.left(20)}});
-        }
-
-        // Émettre le token en temps réel
-        emit partialResponse(text);
-
-        // Sentence splitting : émettre les phrases complètes pour TTS
-        trySplitSentences();
+        // Slow-path text_delta — mutualise la logique avec le fast-path.
+        applyTextDelta(index, delta[QStringLiteral("text")].toString());
 
     } else if (deltaType == QLatin1String("input_json_delta")) {
         // Accumulation progressive du JSON pour tool_use
@@ -862,36 +996,99 @@ void ClaudeAPI::onNetworkError(QNetworkReply::NetworkError error)
     PipelineEventBus::instance()->setModuleError(
         PipelineModule::Claude, QStringLiteral("Network error %1").arg(static_cast<int>(error)));
 
+    // ── Lire HTTP status + body brut pour diagnostiquer (Qt expose souvent
+    //    `errorString()` vide alors que le serveur a renvoyé un JSON utile,
+    //    p.ex. {"error":{"type":"invalid_request_error","message":"Your credit
+    //    balance is too low..."}} en HTTP 400).
+    int httpStatus = 0;
+    QByteArray body;
+    QString anthropicType, anthropicMessage;
+    if (m_currentReply) {
+        httpStatus = m_currentReply->attribute(
+            QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        body = m_currentReply->peek(8192); // ne pas consommer pour onReplyFinished
+        if (!body.isEmpty()) {
+            QJsonParseError pe;
+            QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+            if (pe.error == QJsonParseError::NoError && doc.isObject()) {
+                QJsonObject errObj = doc.object().value(QStringLiteral("error")).toObject();
+                anthropicType    = errObj.value(QStringLiteral("type")).toString();
+                anthropicMessage = errObj.value(QStringLiteral("message")).toString();
+            }
+        }
+    }
+
+    // Log diagnostic complet (toujours)
+    hClaude() << "Réseau KO — code Qt:" << static_cast<int>(error)
+              << "HTTP:" << httpStatus
+              << "errorString:" << (m_currentReply ? m_currentReply->errorString() : QString())
+              << "body:" << QString::fromUtf8(body.left(512));
+
     QString errorString;
-    switch (error) {
-    case QNetworkReply::ConnectionRefusedError:
-        errorString = QStringLiteral("Connexion refusée par l'API Claude");
-        break;
-    case QNetworkReply::RemoteHostClosedError:
-        errorString = QStringLiteral("Connexion fermée par le serveur Claude");
-        break;
-    case QNetworkReply::HostNotFoundError:
-        errorString = QStringLiteral("Serveur Claude introuvable");
-        break;
-    case QNetworkReply::TimeoutError:
-        errorString = QStringLiteral("Timeout de connexion Claude");
-        break;
-    case QNetworkReply::SslHandshakeFailedError:
-        errorString = QStringLiteral("Erreur SSL avec l'API Claude");
-        break;
-    case QNetworkReply::AuthenticationRequiredError:
-        errorString = QStringLiteral("Authentification requise — vérifiez la clé API");
-        break;
-    default:
-        errorString = QStringLiteral("Erreur réseau: %1").arg(
-            m_currentReply ? m_currentReply->errorString()
-                           : QStringLiteral("inconnue"));
+
+    // 1) Si Anthropic a renvoyé un message JSON, c'est lui le plus pertinent.
+    if (!anthropicMessage.isEmpty()) {
+        // Détection des cas critiques pour message TTS dédié
+        const QString lowMsg = anthropicMessage.toLower();
+        if (lowMsg.contains(QStringLiteral("credit balance"))
+            || lowMsg.contains(QStringLiteral("billing"))
+            || lowMsg.contains(QStringLiteral("insufficient"))) {
+            errorString = QStringLiteral("Crédits Anthropic épuisés. "
+                                         "Rechargez votre compte sur console.anthropic.com.");
+        } else if (anthropicType == QStringLiteral("authentication_error")
+                   || anthropicType == QStringLiteral("permission_error")) {
+            errorString = QStringLiteral("Clé API Claude invalide ou expirée.");
+        } else if (anthropicType == QStringLiteral("rate_limit_error")) {
+            errorString = QStringLiteral("Limite de requêtes Claude atteinte. "
+                                         "Réessayez dans un instant.");
+        } else if (anthropicType == QStringLiteral("not_found_error")) {
+            errorString = QStringLiteral("Modèle Claude introuvable. "
+                                         "Vérifiez le nom du modèle.");
+        } else {
+            errorString = QStringLiteral("Erreur Claude (HTTP %1): %2")
+                              .arg(httpStatus).arg(anthropicMessage);
+        }
+    } else {
+        // 2) Sinon, message générique selon le code Qt
+        switch (error) {
+        case QNetworkReply::ConnectionRefusedError:
+            errorString = QStringLiteral("Connexion refusée par l'API Claude");
+            break;
+        case QNetworkReply::RemoteHostClosedError:
+            errorString = QStringLiteral("Connexion fermée par le serveur Claude");
+            break;
+        case QNetworkReply::HostNotFoundError:
+            errorString = QStringLiteral("Serveur Claude introuvable (DNS)");
+            break;
+        case QNetworkReply::TimeoutError:
+            errorString = QStringLiteral("Timeout de connexion Claude");
+            break;
+        case QNetworkReply::SslHandshakeFailedError:
+            errorString = QStringLiteral("Erreur SSL avec l'API Claude");
+            break;
+        case QNetworkReply::AuthenticationRequiredError:
+            errorString = QStringLiteral("Authentification requise — vérifiez la clé API");
+            break;
+        default:
+            errorString = QStringLiteral("Erreur réseau Claude (HTTP %1): %2")
+                              .arg(httpStatus)
+                              .arg(m_currentReply ? m_currentReply->errorString()
+                                                  : QStringLiteral("inconnue"));
+        }
     }
 
     hClaude() << "Erreur réseau:" << errorString;
 
-    // Retry si possible
-    if (m_retryCount < MAX_RETRIES) {
+    // 3) Décision retry : seules les erreurs vraiment transitoires sont retentées.
+    //    Surtout PAS pour 400/401/403/404 ou crédit épuisé (échec définitif).
+    const bool isClientFatal =
+        (httpStatus >= 400 && httpStatus < 500 && httpStatus != 429)
+        || anthropicType == QStringLiteral("authentication_error")
+        || anthropicType == QStringLiteral("permission_error")
+        || anthropicType == QStringLiteral("invalid_request_error")
+        || anthropicType == QStringLiteral("not_found_error");
+
+    if (!isClientFatal && m_retryCount < MAX_RETRIES) {
         retryWithBackoff();
     } else {
         setError(errorString);
@@ -967,6 +1164,11 @@ void ClaudeAPI::retryWithBackoff()
 
     // Nettoyer la connexion actuelle
     if (m_currentReply) {
+        // R3 audit threads : disconnect explicite avant abort() pour éviter
+        // le warning Qt "QNetworkReplyImplPrivate::error: Internal problem,
+        // this method must only be called once." (re-déclenché par abort()
+        // sur un reply déjà en erreur).
+        disconnect(m_currentReply, nullptr, this, nullptr);
         m_currentReply->blockSignals(true);
         m_currentReply->abort();
         m_currentReply->deleteLater();

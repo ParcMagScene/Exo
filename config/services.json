@@ -1,204 +1,162 @@
 [
   {
-    "name": "TTS",
-    "port": 8767,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/tts/tts_server_streaming.py",
-    "args": ["--host", "0.0.0.0", "--port", "8767"],
-    "health_url": "http://127.0.0.1:8767/health",
-    "startup_timeout_ms": 120000
+    "name": "Orchestrator",
+    "port": 8765,
+    "venv": ".venv",
+    "script": "python/orchestrator/exo_server.py",
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
   },
   {
     "name": "STT",
     "port": 8766,
-    "critical": false,
     "venv": ".venv_stt_tts",
     "script": "python/stt/stt_server.py",
-    "args": ["--backend", "whispercpp", "--model", "small", "--beam-size", "1", "--language", "fr", "--device", "vulkan", "--compute-type", "int8"]
+    "args": ["--backend", "whispercpp", "--model", "small", "--beam-size", "1", "--language", "fr", "--device", "vulkan"],
+    "startup_timeout_ms": 30000,
+    "readiness_timeout_ms": 30000,
+    "dependencies": []
+  },
+  {
+    "name": "TTS",
+    "port": 8767,
+    "venv": "services/orpheus/venv",
+    "script": "services/orpheus/server_ws.py",
+    "args": ["--host", "0.0.0.0", "--port", "8767"],
+    "startup_timeout_ms": 60000,
+    "readiness_timeout_ms": 60000,
+    "dependencies": []
   },
   {
     "name": "VAD",
     "port": 8768,
-    "critical": false,
     "venv": ".venv_stt_tts",
     "script": "python/vad/vad_server.py",
-    "args": []
+    "args": [],
+    "startup_timeout_ms": 20000,
+    "readiness_timeout_ms": 20000,
+    "dependencies": []
   },
   {
     "name": "Wakeword",
     "port": 8770,
-    "critical": false,
     "venv": ".venv_stt_tts",
     "script": "python/wakeword/wakeword_server.py",
-    "args": []
+    "args": [],
+    "startup_timeout_ms": 20000,
+    "readiness_timeout_ms": 20000,
+    "dependencies": []
   },
   {
     "name": "Memory",
     "port": 8771,
-    "critical": true,
     "venv": ".venv_stt_tts",
     "script": "python/memory/memory_server.py",
-    "args": []
+    "args": [],
+    "startup_timeout_ms": 300000,
+    "readiness_timeout_ms": 300000,
+    "dependencies": []
   },
   {
     "name": "NLU",
     "port": 8772,
-    "critical": false,
     "venv": ".venv_stt_tts",
     "script": "python/nlu/nlu_server.py",
-    "args": []
+    "args": [],
+    "startup_timeout_ms": 30000,
+    "readiness_timeout_ms": 30000,
+    "dependencies": []
   },
   {
-    "name": "Context",
-    "port": 8777,
-    "critical": true,
-    "venv": ".venv_stt_tts",
-    "script": "python/context/context_engine.py",
-    "args": []
-  },
-  {
-    "name": "Planner",
-    "port": 8778,
-    "critical": true,
-    "venv": ".venv_stt_tts",
-    "script": "python/planner/task_planner_server.py",
-    "args": []
-  },
-  {
-    "name": "Executor",
-    "port": 8779,
-    "critical": true,
-    "venv": ".venv_stt_tts",
-    "script": "python/executor/task_executor_server.py",
-    "args": []
-  },
-  {
-    "name": "Verifier",
-    "port": 8780,
-    "critical": true,
-    "venv": ".venv_stt_tts",
-    "script": "python/verifier/task_verifier_server.py",
-    "args": []
-  },
-  {
-    "name": "FileService",
-    "port": 8781,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/tools/file_service.py",
-    "args": []
-  },
-  {
-    "name": "Calendar",
-    "port": 8782,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/tools/calendar_service.py",
-    "args": []
-  },
-  {
-    "name": "System",
-    "port": 8783,
-    "critical": true,
-    "venv": ".venv_stt_tts",
-    "script": "python/tools/system_service.py",
-    "args": []
-  },
-  {
-    "name": "Orchestrator",
-    "port": 8765,
-    "critical": true,
-    "venv": ".venv",
-    "script": "python/orchestrator/exo_server.py",
-    "args": []
-  },
-  {
-    "name": "HomeGraph",
-    "port": 8784,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/domotique/homegraph_server.py",
-    "args": []
-  },
-  {
-    "name": "Domotic",
-    "port": 8785,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/domotique/domotic_service.py",
-    "args": []
-  },
-  {
-    "name": "Camera",
-    "port": 8786,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/domotique/camera_service.py",
-    "args": []
-  },
-  {
-    "name": "Samsung",
-    "port": 8787,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/domotique/samsung_service.py",
-    "args": []
-  },
-  {
-    "name": "Voltalis",
-    "port": 8788,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/domotique/voltalis_service.py",
-    "args": []
-  },
-  {
-    "name": "Echo",
-    "port": 8789,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/domotique/echo_service.py",
-    "args": []
-  },
-  {
-    "name": "NetworkMap",
-    "port": 8790,
-    "critical": false,
-    "venv": ".venv_stt_tts",
-    "script": "python/network/network_map_service.py",
-    "args": []
-  },
-  {
-    "name": "WebSearch",
+    "name": "Websearch",
     "port": 8773,
-    "critical": false,
     "venv": ".venv",
     "script": "python/websearch/websearch_server.py",
-    "args": []
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
   },
   {
     "name": "News",
     "port": 8774,
-    "critical": false,
     "venv": ".venv",
     "script": "python/news/news_server.py",
-    "args": []
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
   },
   {
     "name": "Knowledge",
     "port": 8775,
-    "critical": false,
     "venv": ".venv",
     "script": "python/knowledge/knowledge_server.py",
-    "args": []
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
   },
   {
     "name": "Tools",
     "port": 8776,
-    "critical": false,
     "venv": ".venv",
     "script": "python/tools/tools_server.py",
-    "args": []
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
+  },
+  {
+    "name": "Context",
+    "port": 8777,
+    "venv": ".venv_stt_tts",
+    "script": "python/context/context_engine.py",
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
+  },
+  {
+    "name": "Planner",
+    "port": 8778,
+    "venv": ".venv_stt_tts",
+    "script": "python/planner/task_planner_server.py",
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
+  },
+  {
+    "name": "Executor",
+    "port": 8779,
+    "venv": ".venv_stt_tts",
+    "script": "python/executor/task_executor_server.py",
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
+  },
+  {
+    "name": "Verifier",
+    "port": 8780,
+    "venv": ".venv_stt_tts",
+    "script": "python/verifier/task_verifier_server.py",
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
+  },
+  {
+    "name": "System",
+    "port": 8783,
+    "venv": ".venv_stt_tts",
+    "script": "python/tools/system_service.py",
+    "args": [],
+    "startup_timeout_ms": 15000,
+    "readiness_timeout_ms": 15000,
+    "dependencies": []
   }
 ]

@@ -177,7 +177,7 @@ private:
     static constexpr const char *DEFAULT_STT_LANGUAGE    = "fr";
     static constexpr int         DEFAULT_STT_BEAM_SIZE   = 1;
     static constexpr const char *DEFAULT_TTS_VOICE       = "fr_denise";
-    static constexpr const char *DEFAULT_TTS_ENGINE      = "cosyvoice2_cuda";
+    static constexpr const char *DEFAULT_TTS_ENGINE      = "orpheus_fr_cuda";
     static constexpr const char *DEFAULT_VAD_BACKEND     = "hybrid";
     static constexpr double      DEFAULT_VAD_THRESHOLD   = 0.45;
 };

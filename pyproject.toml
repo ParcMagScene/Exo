@@ -7,9 +7,11 @@ name = "exo"
 version = "30.0.0"
 requires-python = ">=3.11"
 
+
+
 [tool.setuptools.packages.find]
-where = [".", "python"]
-exclude = ["tests*", "build*"]
+where = ["D:/EXO/python"]
+exclude = ["D:/EXO/tests*", "D:/EXO/build*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

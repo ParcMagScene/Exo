@@ -32,6 +32,15 @@ public:
         QProcess              *process = nullptr;
         int                    retryCount = 0;
         qint64                 pid     = 0;
+
+        // Champs enrichis pour le statut détaillé
+        QString                message;
+        qint64                 startupTimeMs = -1;
+        qint64                 latencyMs = -1;
+        int                    restarts = 0;
+        qint64                 lastHeartbeat = 0;
+        double                 cpu = 0.0;
+        double                 ram = 0.0;
     };
 
     explicit ServiceRegistry(QObject *parent = nullptr);

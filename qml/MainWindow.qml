@@ -21,7 +21,7 @@ ApplicationWindow {
     color: Theme.bgPrimary
 
     // ── Icône d'application unifiée ──
-    readonly property string appIcon: "qrc:/assets/icons/app/exo.svg"
+    readonly property string appIcon: "qrc:/qt/qml/RaspberryAssistant/assets/icons/app/exo.svg"
 
     // ── Floor Plan Model (QML_ELEMENT) ──
     FloorPlanModel { id: floorPlanModel }
@@ -262,7 +262,9 @@ ApplicationWindow {
                 case "observability":
                     index = isExpert ? 11 : 9   // ObservabilityPage / ObservabilityDashboard
                     break
-
+                case "logsFull":
+                    index = 18                   // LogsPage (full runtime log viewer)
+                    break
                 // ── Pages EXPERT uniquement ──────────────────────────────
                 case "vision":
                     index = isExpert ? 13 : -1  // VisionPageExpert
@@ -372,13 +374,6 @@ ApplicationWindow {
                 Behavior on height { NumberAnimation { duration: 200 } }
             }
 
-            // ── Header Bar ──
-            HeaderBar {
-                Layout.fillWidth: true
-                currentPage: sidebar.activePanel
-                pipelineState: mainWindow.appStatus
-            }
-
             StackLayout {
                 id: centralStack
                 Layout.fillWidth: true
@@ -471,6 +466,7 @@ ApplicationWindow {
                     active: false
                     asynchronous: true
                     sourceComponent: Component { ObservabilityPage {} }
+                    onStatusChanged: if (status === Loader.Error) console.error("[QML] Loader ObservabilityPage failed:", sourceComponent ? sourceComponent.errorString() : "unknown")
                     Connections {
                         target: centralStack
                         function onCurrentIndexChanged() { if (centralStack.currentIndex === 11) loader11.active = true }
@@ -483,6 +479,7 @@ ApplicationWindow {
                     active: false
                     asynchronous: true
                     sourceComponent: Component { PipelinePageExpert {} }
+                    onStatusChanged: if (status === Loader.Error) console.error("[QML] Loader PipelinePageExpert failed:", sourceComponent ? sourceComponent.errorString() : "unknown")
                     Connections {
                         target: centralStack
                         function onCurrentIndexChanged() { if (centralStack.currentIndex === 12) loader12.active = true }
@@ -495,6 +492,7 @@ ApplicationWindow {
                     active: false
                     asynchronous: true
                     sourceComponent: Component { VisionPageExpert {} }
+                    onStatusChanged: if (status === Loader.Error) console.error("[QML] Loader VisionPageExpert failed:", sourceComponent ? sourceComponent.errorString() : "unknown")
                     Connections {
                         target: centralStack
                         function onCurrentIndexChanged() { if (centralStack.currentIndex === 13) loader13.active = true }
@@ -507,6 +505,7 @@ ApplicationWindow {
                     active: false
                     asynchronous: true
                     sourceComponent: Component { SimulationPageExpert {} }
+                    onStatusChanged: if (status === Loader.Error) console.error("[QML] Loader SimulationPageExpert failed:", sourceComponent ? sourceComponent.errorString() : "unknown")
                     Connections {
                         target: centralStack
                         function onCurrentIndexChanged() { if (centralStack.currentIndex === 14) loader14.active = true }
@@ -519,6 +518,7 @@ ApplicationWindow {
                     active: false
                     asynchronous: true
                     sourceComponent: Component { SpatialCognitionPageExpert {} }
+                    onStatusChanged: if (status === Loader.Error) console.error("[QML] Loader SpatialCognitionPageExpert failed:", sourceComponent ? sourceComponent.errorString() : "unknown")
                     Connections {
                         target: centralStack
                         function onCurrentIndexChanged() { if (centralStack.currentIndex === 15) loader15.active = true }
@@ -531,6 +531,7 @@ ApplicationWindow {
                     active: false
                     asynchronous: true
                     sourceComponent: Component { SecurityPageExpert {} }
+                    onStatusChanged: if (status === Loader.Error) console.error("[QML] Loader SecurityPageExpert failed:", sourceComponent ? sourceComponent.errorString() : "unknown")
                     Connections {
                         target: centralStack
                         function onCurrentIndexChanged() { if (centralStack.currentIndex === 16) loader16.active = true }
@@ -543,9 +544,23 @@ ApplicationWindow {
                     active: false
                     asynchronous: true
                     sourceComponent: Component { DevelopmentPageExpert {} }
+                    onStatusChanged: if (status === Loader.Error) console.error("[QML] Loader DevelopmentPageExpert failed:", sourceComponent ? sourceComponent.errorString() : "unknown")
                     Connections {
                         target: centralStack
                         function onCurrentIndexChanged() { if (centralStack.currentIndex === 17) loader17.active = true }
+                    }
+                }
+
+                // Index 18 : LogsPage — visualiseur runtime complet (tri/filtre/copie)
+                Loader {
+                    id: loader18
+                    active: false
+                    asynchronous: true
+                    sourceComponent: Component { LogsPage {} }
+                    onStatusChanged: if (status === Loader.Error) console.error("[QML] Loader LogsPage failed:", sourceComponent ? sourceComponent.errorString() : "unknown")
+                    Connections {
+                        target: centralStack
+                        function onCurrentIndexChanged() { if (centralStack.currentIndex === 18) loader18.active = true }
                     }
                 }
             }

@@ -505,7 +505,81 @@ Rectangle {
                             ExoButton {
                                 Layout.fillWidth: true
                                 text: "📋 Dump Memory Profile"
-                                onClicked: console.log("Dumping memory profile")
+                                onClicked: memoryDumpPopup.open()
+                            }
+
+                            ExoButton {
+                                Layout.fillWidth: true
+                                text: "🧹 Forcer GC (collecte manuelle)"
+                                onClicked: {
+                                    if (typeof gc === 'function') {
+                                        gc();
+                                        memoryDumpPopup.open();
+                                    } else {
+                                        Qt.callLater(function() {
+                                            memoryDumpPopup.open();
+                                        });
+                                    }
+                                }
+                            }
+
+                            Popup {
+                                id: memoryDumpPopup
+                                modal: true
+                                focus: true
+                                width: 600
+                                height: 400
+                                background: Rectangle {
+                                    color: Theme.bgElevated
+                                    radius: Theme.radiusSmall
+                                    border.color: Theme.accent
+                                    border.width: 2
+                                }
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: Theme.spacing12
+                                    spacing: Theme.spacing8
+                                    Text {
+                                        text: "État mémoire QML (synthétique)"
+                                        font.family: Theme.fontMono
+                                        font.pixelSize: Theme.fontLarge
+                                        color: Theme.accent
+                                    }
+                                    TextArea {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        readOnly: true
+                                        font.family: Theme.fontMono
+                                        font.pixelSize: Theme.fontTiny
+                                        text: memoryDump()
+                                    }
+                                    ExoButton {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: "Fermer"
+                                        onClicked: memoryDumpPopup.close()
+                                    }
+                                }
+                            }
+
+                            function memoryDump() {
+                                var out = [];
+                                out.push("Objets QML vivants (synthétique):");
+                                out.push("- root: " + root);
+                                if (typeof Qt !== 'undefined' && Qt.binding) {
+                                    out.push("- Qt.binding présent (Qt version: " + Qt.version + ")");
+                                }
+                                out.push("- Timers actifs: (non exhaustif)");
+                                if (typeof animTimer !== 'undefined') out.push("  - animTimer running=" + animTimer.running);
+                                if (typeof saveGeometryTimer !== 'undefined') out.push("  - saveGeometryTimer running=" + saveGeometryTimer.running);
+                                out.push("- Loaders dynamiques:");
+                                if (typeof loader11 !== 'undefined') out.push("  - loader11 active=" + loader11.active);
+                                if (typeof loader12 !== 'undefined') out.push("  - loader12 active=" + loader12.active);
+                                if (typeof loader13 !== 'undefined') out.push("  - loader13 active=" + loader13.active);
+                                if (typeof loader14 !== 'undefined') out.push("  - loader14 active=" + loader14.active);
+                                if (typeof loader15 !== 'undefined') out.push("  - loader15 active=" + loader15.active);
+                                if (typeof loader16 !== 'undefined') out.push("  - loader16 active=" + loader16.active);
+                                out.push("- (Pour un dump complet, utiliser l'inspecteur QML natif)");
+                                return out.join("\n");
                             }
 
                             ExoButton {

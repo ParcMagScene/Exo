@@ -1,4 +1,8 @@
-"""
+﻿"""
+
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+import os
+os.chdir("D:/EXO/")
 exo_server.py — EXO backend server.
 
 Runs:
@@ -12,7 +16,10 @@ This is the main entry point for the Python side of EXO.
 from __future__ import annotations
 
 import asyncio
-import json
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
 import logging
 import os
 import signal
@@ -440,7 +447,7 @@ class GUIServer:
                                           **result}))
 
         elif msg_type == "v12_explain":
-            eng = self._v12.get("explainability_v2")
+            eng = self._v16.get("explainability")
             if eng:
                 kind = msg.get("kind", "plan")
                 if kind == "plan":
@@ -563,7 +570,7 @@ class GUIServer:
                                           **result}))
 
         elif msg_type == "v13_explain":
-            eng = self._v13.get("explainability_v3")
+            eng = self._v16.get("explainability")
             if eng:
                 kind = msg.get("kind", "simulation")
                 if kind == "simulation":
@@ -571,7 +578,8 @@ class GUIServer:
                 elif kind == "prediction":
                     text = eng.explain_prediction(msg.get("prediction", {}))
                 elif kind == "future":
-                    text = eng.explain_future(msg.get("future", {}))
+                    # Signature str héritée v3 (v5 forme dict exposée via v15_explain)
+                    text = eng.explain_future_str(msg.get("future", {}))
                 else:
                     text = ""
                 await ws.send(json.dumps({"type": "v13_explain_result",
@@ -702,7 +710,7 @@ class GUIServer:
                                           **result}))
 
         elif msg_type == "v14_explain":
-            eng = self._v14.get("explainability_v4")
+            eng = self._v16.get("explainability")
             if eng:
                 kind = msg.get("kind", "agent")
                 if kind == "agent":
@@ -814,7 +822,7 @@ class GUIServer:
                 await ws.send(json.dumps({"type": "v15_validate_result", **result}))
 
         elif msg_type == "v15_explain":
-            exp = self._v15.get("explainability_v5")
+            exp = self._v16.get("explainability")
             if exp:
                 mode = msg.get("mode", "decision")
                 if mode == "inference":
@@ -919,7 +927,7 @@ class GUIServer:
                                           **result}))
 
         elif msg_type == "v16_explain":
-            exp = self._v16.get("explainability_v6")
+            exp = self._v16.get("explainability")
             if exp:
                 mode = msg.get("mode", "initiative")
                 if mode == "emergence":

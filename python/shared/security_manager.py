@@ -7,7 +7,13 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-AUDIT_LOG_PATH = Path(os.environ.get("EXO_AUDIT_LOG", os.environ.get("EXO_SSD_ROOT", r"D:\EXO") + r"\project\logs\audit.jsonl"))
+AUDIT_LOG_PATH = Path(
+    os.environ.get("EXO_AUDIT_LOG")
+    or (
+        (os.environ.get("EXO_LOGS_DIR") or (os.environ.get("EXO_SSD_ROOT", r"D:\EXO") + r"\logs"))
+        + r"\audit.jsonl"
+    )
+)
 
 # ── Permission rules ─────────────────────────────────────────────
 

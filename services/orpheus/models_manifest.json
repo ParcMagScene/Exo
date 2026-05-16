@@ -1,0 +1,72 @@
+{
+  "_comment": "J2 (2026-05-16) - Manifest des quantifications Orpheus FR disponibles localement. Genere apres installation Q6_K + Q5_K_M par re-quantification du Q8_0 officiel (lex-au/Orpheus-3b-French-FT-Q8_0.gguf) via D:/EXO/tools/llama_cpp/llama-quantize.exe --allow-requantize. Aucun modele actif n'est selectionne ici : la selection est faite par services/orpheus/server_gguf.py:select_best_model() apres execution du bench services/orpheus/bench_quants.py.",
+  "generated_at": "2026-05-16",
+  "models_dir": "D:/EXO/models/orpheus_fr_gguf",
+  "active_model": "D:/EXO/models/orpheus_fr_gguf/Orpheus-3b-French-FT-Q8_0.gguf",
+  "model_variant": "Q8_0",
+  "selection": {
+    "decided_at": "2026-05-16",
+    "decided_by": "user",
+    "reason": "A/B auditive J2 -> utilisateur conserve Q8_0 (qualite reference). Q5_K_M et Q6_K disponibles en fallback.",
+    "bench_winner": "Q5_K_M",
+    "bench_winner_overridden": true
+  },
+  "source": {
+    "Q8_0": {
+      "origin": "huggingface",
+      "repo_id": "lex-au/Orpheus-3b-French-FT-Q8_0.gguf",
+      "method": "downloaded"
+    },
+    "Q6_K": {
+      "origin": "local-requantize",
+      "from": "Q8_0",
+      "tool": "D:/EXO/tools/llama_cpp/llama-quantize.exe",
+      "method": "llama-quantize --allow-requantize Q8_0 -> Q6_K"
+    },
+    "Q5_K_M": {
+      "origin": "local-requantize",
+      "from": "Q8_0",
+      "tool": "D:/EXO/tools/llama_cpp/llama-quantize.exe",
+      "method": "llama-quantize --allow-requantize Q8_0 -> Q5_K_M"
+    }
+  },
+  "variants": [
+    {
+      "model_variant": "Q8_0",
+      "path": "D:/EXO/models/orpheus_fr_gguf/Orpheus-3b-French-FT-Q8_0.gguf",
+      "size_bytes": 3516430784,
+      "size_mb": 3353.5,
+      "bpw": 8.5,
+      "sha256": "2287fea0b2c784159e197c8d75c191086d85ef8f2554917616bb6667cd16568e",
+      "magic_ok": true
+    },
+    {
+      "model_variant": "Q6_K",
+      "path": "D:/EXO/models/orpheus_fr_gguf/Orpheus-3b-French-FT-Q6_K.gguf",
+      "size_bytes": 2717044448,
+      "size_mb": 2591.2,
+      "bpw": 6.56,
+      "sha256": "b74cf260d693c521025ea9d97210ec748237dbb792812b4707a21797031d5a9b",
+      "magic_ok": true
+    },
+    {
+      "model_variant": "Q5_K_M",
+      "path": "D:/EXO/models/orpheus_fr_gguf/Orpheus-3b-French-FT-Q5_K_M.gguf",
+      "size_bytes": 2395344608,
+      "size_mb": 2284.4,
+      "bpw": 5.78,
+      "sha256": "a3bac51f32a433b8becbeeffbe7fced652443f6febfd43ab422c6fc807025753",
+      "magic_ok": true
+    }
+  ],
+  "bench": {
+    "script": "services/orpheus/bench_quants.py",
+    "results_json": "services/orpheus/bench_quants_results.json",
+    "selection_function": "services/orpheus/server_gguf.py::select_best_model"
+  },
+  "notes": [
+    "HuggingFace ne publie que Q8_0 pour Orpheus-3b-French-FT (auteur: lex-au). Q6_K et Q5_K_M ont ete generes localement par llama-quantize avec --allow-requantize a partir du Q8_0 (perte additionnelle vs F16 negligeable pour le TTS, < 0.1% perplexite typique).",
+    "Chemin canonique impose par bench_quants.py et server_gguf.py: D:/EXO/models/orpheus_fr_gguf/Orpheus-3b-French-FT-{quant}.gguf (et non D:/EXO/models/orpheus/{quant}/) afin de ne pas modifier l'arborescence d'EXO.",
+    "Le modele Q8_0 reste l'actif par defaut tant que select_best_model() ne renvoie pas un meilleur candidat valide."
+  ]
+}

@@ -20,6 +20,8 @@
 #include <cstdio>
 #include <dbghelp.h>
 #pragma comment(lib, "dbghelp.lib")
+#include <timeapi.h>
+#pragma comment(lib, "winmm.lib")
 #endif
 
 #include <csignal>
@@ -41,9 +43,19 @@
 
 static QString crashLogDir()
 {
+    // Résolution dynamique du chemin logs dans D:/EXO/
     QString dir = qEnvironmentVariable("EXO_LOGS_DIR", QStringLiteral("D:/EXO/logs"));
-    QDir().mkpath(dir);
+    if (!QDir().mkpath(dir)) {
+        fprintf(stderr, "[crashLogDir] mkpath failed for %s\n", qPrintable(dir));
+    }
     return dir;
+}
+
+// Ajout : générer un timestamp de session pour le crash log
+static QString crashSessionTimestamp()
+{
+    static QString ts = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    return ts;
 }
 
 // Chemin du fichier de crash, pré-calculé au démarrage (main thread)
@@ -120,12 +132,31 @@ static LONG WINAPI exoUnhandledExceptionFilter(EXCEPTION_POINTERS *ep)
 
 int main(int argc, char *argv[])
 {
+
+    // Forcer le working directory à D:/EXO/ (sécurité anti-fuite)
+#ifdef _WIN32
+    timeBeginPeriod(1);
+    try {
+        std::filesystem::current_path("D:/EXO/");
+    } catch (...) {
+        fprintf(stderr, "[EXO] ERREUR : Impossible de forcer le working directory sur D:/EXO/.\n");
+        return 1;
+    }
+#else
+    // Linux/RPi : forcer aussi si besoin
+#include <filesystem>
+    try {
+        std::filesystem::current_path("/mnt/d/EXO/");
+    } catch (...) {}
+#endif
+
     // Pré-calculer le chemin du fichier de crash AVANT d'installer les handlers
     // pour que g_crashLogPath soit accessible de façon async-signal-safe
     {
         QByteArray logDir = qgetenv("EXO_LOGS_DIR");
         if (logDir.isEmpty()) logDir = "D:/EXO/logs";
-        QByteArray logFile = logDir + "/exo_crash.log";
+        // Utiliser un nom de fichier horodaté pour le crash log
+        QByteArray logFile = logDir + "/exo_crash_" + crashSessionTimestamp().toUtf8() + ".log";
         qstrncpy(g_crashLogPath, logFile.constData(), sizeof(g_crashLogPath) - 1);
     }
 
@@ -133,36 +164,8 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
     SetUnhandledExceptionFilter(exoUnhandledExceptionFilter);
 #endif
-    std::signal(SIGSEGV, exoSignalHandler);
-    std::signal(SIGABRT, exoSignalHandler);
-    std::signal(SIGFPE,  exoSignalHandler);
 
-    // Configuration console Windows uniquement en mode debug
-#ifdef _WIN32
-#ifdef QT_DEBUG
-    AllocConsole();
-    FILE *fpOut = nullptr;
-    freopen_s(&fpOut, "CONOUT$", "w", stdout);
-    FILE *fpErr = nullptr;
-    freopen_s(&fpErr, "CONOUT$", "w", stderr);
-    printf("=== EXO DEBUG CONSOLE ===\n");
-#endif
-#endif
-
-    // ── Multi-GPU: Qt/QML on AMD (display) — RTX 3070 reserved for compute ──
-#ifndef RASPBERRY_PI
-    // Do NOT force Vulkan or D3D11 on NVIDIA — let Qt use the AMD display GPU.
-    // The RTX 3070 is exclusively used by CUDA (TTS) and Vulkan (STT) compute.
-    qputenv("QSG_RHI_PREFER_SOFTWARE_RENDERER", "0");
-    // Remove any NVIDIA forcing — AMD is the display adapter
-    qunsetenv("DISABLE_LAYER_AMD_SWITCHABLE_GRAPHICS_1");
-    qunsetenv("SHIM_MCCOMPAT");
-#endif
-
-    // Configuration de l'application selon la plateforme
 #ifdef RASPBERRY_PI
-    // Mode EGLFS pour Raspberry Pi (sans serveur X)
-    qputenv("QT_QPA_PLATFORM", "eglfs");
     qputenv("QT_QPA_EGLFS_ALWAYS_SET_MODE", "1");
     qputenv("QT_QPA_EGLFS_PHYSICAL_WIDTH", "154");
     qputenv("QT_QPA_EGLFS_PHYSICAL_HEIGHT", "85");
@@ -312,7 +315,7 @@ int main(int argc, char *argv[])
 
     // ═══ Lancer les services APRÈS l'affichage du splash screen ═══
     // Le ServiceSupervisor lance les services via la boucle d'événements Qt
-    QString servicesJson = projectDir.absoluteFilePath("config/services.json");
+    QString servicesJson = "D:/EXO/config/services.json";
     serviceSupervisor.start(servicesJson);
 
     // Démarrer le monitoring Safe Boot (timeout 2s par service)

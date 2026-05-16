@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
@@ -63,9 +65,146 @@ class _State:
     snac_device = "cpu"
     voices: List[str] = list(VOICES_FR_DEFAULT)
     default_voice: str = "pierre"
+    active_model_path: Optional[str] = None  # J5 : chemin du .gguf actif
 
 
 STATE = _State()
+
+
+# ---------------------------------------------------------------------------
+# J5 (2026-05-14) : selection dynamique du meilleur modele Orpheus apres bench
+# ---------------------------------------------------------------------------
+# Le bench `services/orpheus/bench_quants.py` produit un JSON
+# `bench_quants_results.json` contenant pour chaque quantification testee :
+#   { "model": "Q8_0" | "Q6_K" | "Q5_K_M" | ..., "rtf": float,
+#     "first_chunk": float (ms), "vram": float (GB), "quality_ok": bool }
+# select_best_model() lit ce JSON et renvoie le chemin .gguf du meilleur
+# candidat selon les criteres (RTF<1.20, first_chunk<450ms, qualite OK,
+# VRAM<=6.5GB). Sans bench valide -> renvoie None (caller fallback Q8_0).
+# Aucun telechargement automatique n'est effectue : seuls les .gguf deja
+# presents sur disque sont utilises.
+DEFAULT_MODELS_DIR = Path(r"D:\EXO\models\orpheus_fr_gguf")
+DEFAULT_GGUF = DEFAULT_MODELS_DIR / "Orpheus-3b-French-FT-Q8_0.gguf"
+BENCH_RESULTS_JSON = Path(__file__).with_name("bench_quants_results.json")
+
+# Criteres J5
+SEL_MAX_RTF = 1.20
+SEL_MAX_FIRST_MS = 450.0
+SEL_MAX_VRAM_GB = 6.5
+
+
+def _quant_to_path(quant: str, models_dir: Path = DEFAULT_MODELS_DIR) -> Path:
+    return models_dir / f"Orpheus-3b-French-FT-{quant}.gguf"
+
+
+def _valid_entry(d: object) -> bool:
+    if not isinstance(d, dict):
+        return False
+    required = ("model", "rtf", "first_chunk", "vram", "quality_ok")
+    if not all(k in d for k in required):
+        return False
+    try:
+        float(d["rtf"]); float(d["first_chunk"]); float(d["vram"])
+    except (TypeError, ValueError):
+        return False
+    return isinstance(d["model"], str) and isinstance(d["quality_ok"], bool)
+
+
+def select_best_model(
+    json_path: Path = BENCH_RESULTS_JSON,
+    models_dir: Path = DEFAULT_MODELS_DIR,
+) -> Optional[str]:
+    """Retourne le chemin .gguf du meilleur modele selon les resultats du bench
+    `bench_quants.py`. Renvoie None si aucun candidat valide (caller doit
+    appliquer son propre fallback)."""
+    if not json_path.is_file():
+        log.info("[select] aucun bench JSON (%s) -> selection auto desactivee", json_path.name)
+        return None
+    try:
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        log.warning("[select] JSON bench illisible (%s): %s", json_path.name, exc)
+        return None
+
+    entries = data.get("results") if isinstance(data, dict) else data
+    if not isinstance(entries, list):
+        log.warning("[select] format JSON inattendu, attendu liste ou {results:[...]}")
+        return None
+
+    candidates = []
+    for raw in entries:
+        if not _valid_entry(raw):
+            continue
+        gguf = _quant_to_path(raw["model"], models_dir)
+        if not gguf.is_file():
+            continue  # modele absent du disque -> ignore
+        candidates.append({
+            "model": raw["model"],
+            "rtf": float(raw["rtf"]),
+            "first_chunk": float(raw["first_chunk"]),
+            "vram": float(raw["vram"]),
+            "quality_ok": bool(raw["quality_ok"]),
+            "path": str(gguf),
+        })
+
+    if not candidates:
+        log.info("[select] aucun candidat valide dans le bench")
+        return None
+
+    eligible = [
+        c for c in candidates
+        if c["rtf"] < SEL_MAX_RTF
+        and c["first_chunk"] < SEL_MAX_FIRST_MS
+        and c["quality_ok"]
+        and c["vram"] <= SEL_MAX_VRAM_GB
+    ]
+    if not eligible:
+        log.info(
+            "[select] aucun modele ne satisfait tous les criteres "
+            "(RTF<%.2f, first<%.0fms, quality_ok, VRAM<=%.1fGB)",
+            SEL_MAX_RTF, SEL_MAX_FIRST_MS, SEL_MAX_VRAM_GB,
+        )
+        return None
+
+    # Tri : RTF asc, puis first_chunk asc (plus rapide en cas d'egalite)
+    eligible.sort(key=lambda c: (c["rtf"], c["first_chunk"]))
+    best = eligible[0]
+    log.info(
+        "[select] meilleur candidat: %s (RTF=%.2f, first=%.0fms, VRAM=%.2fGB)",
+        best["model"], best["rtf"], best["first_chunk"], best["vram"],
+    )
+    return best["path"]
+
+
+def load_model(model_path: str) -> object:
+    """Charge un GGUF via llama-cpp-python avec les params J1 et retourne
+    l'instance Llama. Leve une exception en cas d'echec (le caller doit
+    gerer le fallback)."""
+    from llama_cpp import Llama
+    n_ctx = int(os.environ.get("ORPHEUS_N_CTX", "4096"))
+    n_gpu_layers = int(os.environ.get("ORPHEUS_N_GPU_LAYERS", "-1"))
+    n_batch = int(os.environ.get("ORPHEUS_N_BATCH", "1024"))
+    n_ubatch = int(os.environ.get("ORPHEUS_N_UBATCH", "512"))
+    flash_attn = os.environ.get("ORPHEUS_FLASH_ATTN", "1").lower() not in ("0", "false", "no")
+    offload_kqv = os.environ.get("ORPHEUS_OFFLOAD_KQV", "1").lower() not in ("0", "false", "no")
+    t0 = time.time()
+    llm = Llama(
+        model_path=model_path,
+        n_ctx=n_ctx,
+        n_gpu_layers=n_gpu_layers,
+        n_batch=n_batch,
+        n_ubatch=n_ubatch,
+        flash_attn=flash_attn,
+        offload_kqv=offload_kqv,
+        verbose=False,
+        logits_all=False,
+    )
+    log.info(
+        "LLM charge en %.1fs (n_ctx=%d, gpu_layers=%d, n_batch=%d, n_ubatch=%d, "
+        "flash_attn=%s, offload_kqv=%s)",
+        time.time() - t0, n_ctx, n_gpu_layers, n_batch, n_ubatch, flash_attn, offload_kqv,
+    )
+    return llm
 
 
 # ---------------------------------------------------------------------------
@@ -75,32 +214,65 @@ def load_models() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA indisponible. Orpheus exige une GPU NVIDIA.")
 
-    gguf_path = os.environ.get(
-        "ORPHEUS_GGUF_PATH",
-        r"D:\EXO\models\orpheus_fr_gguf\Orpheus-3b-French-FT-Q8_0.gguf",
-    )
+    # J5 (2026-05-14) : selection dynamique du modele.
+    # Priorite :
+    #   1) ORPHEUS_GGUF_PATH explicite (override manuel) -> respecte
+    #   2) bench_quants_results.json -> select_best_model()
+    #   3) fallback Q8_0
+    env_override = os.environ.get("ORPHEUS_GGUF_PATH", "").strip()
+    source = "default"
+    if env_override:
+        gguf_path = env_override
+        source = "env"
+    else:
+        selected = select_best_model()
+        if selected:
+            gguf_path = selected
+            source = "bench"
+        else:
+            gguf_path = str(DEFAULT_GGUF)
+
     if not os.path.isfile(gguf_path):
         raise FileNotFoundError(f"GGUF introuvable : {gguf_path}")
 
-    n_ctx = int(os.environ.get("ORPHEUS_N_CTX", "4096"))
-    n_gpu_layers = int(os.environ.get("ORPHEUS_N_GPU_LAYERS", "-1"))
     STATE.default_voice = os.environ.get("ORPHEUS_DEFAULT_VOICE", "pierre").strip().lower()
 
     log.info("CUDA: True | GPU: %s", torch.cuda.get_device_name(0))
-    log.info("Chargement GGUF : %s", gguf_path)
+    log.info("Chargement GGUF (%s) : %s", source, gguf_path)
 
-    from llama_cpp import Llama
+    # J5 failsafe : si le modele selectionne via bench refuse de charger,
+    # on retombe automatiquement sur Q8_0 sans interrompre le serveur.
+    try:
+        STATE.llm = load_model(gguf_path)
+        STATE.active_model_path = gguf_path
+    except Exception as exc:
+        if source == "bench" and os.path.isfile(DEFAULT_GGUF):
+            log.error("[Orpheus] echec chargement %s -> fallback Q8_0: %s", gguf_path, exc)
+            STATE.llm = load_model(str(DEFAULT_GGUF))
+            STATE.active_model_path = str(DEFAULT_GGUF)
+            gguf_path = str(DEFAULT_GGUF)
+        else:
+            raise
 
-    t0 = time.time()
-    STATE.llm = Llama(
-        model_path=gguf_path,
-        n_ctx=n_ctx,
-        n_gpu_layers=n_gpu_layers,
-        n_batch=512,
-        verbose=False,
-        logits_all=False,
-    )
-    log.info("LLM charge en %.1fs (n_ctx=%d, gpu_layers=%d)", time.time() - t0, n_ctx, n_gpu_layers)
+    # Log d'activation au format demande J5
+    quant = Path(gguf_path).stem.split("-")[-1]  # "Orpheus-3b-French-FT-Q6_K" -> "Q6_K"
+    if source == "bench":
+        # On peut reutiliser les metriques du bench pour le log d'activation
+        try:
+            data = json.loads(BENCH_RESULTS_JSON.read_text(encoding="utf-8"))
+            entries = data.get("results") if isinstance(data, dict) else data
+            for raw in entries or []:
+                if _valid_entry(raw) and raw["model"] == quant:
+                    log.info(
+                        "[Orpheus] Activated model: %s (RTF=%.2f, first_chunk=%.0fms)",
+                        quant, float(raw["rtf"]), float(raw["first_chunk"]),
+                    )
+                    break
+        except Exception:
+            log.info("[Orpheus] Activated model: %s", quant)
+    else:
+        log.info("[Orpheus] Activated model: %s (source=%s)", quant, source)
+
 
     from snac import SNAC
 
@@ -108,6 +280,25 @@ def load_models() -> None:
     STATE.snac_device = "cuda"
     STATE.snac = SNAC.from_pretrained("hubertsiuzdak/snac_24khz").eval().to(STATE.snac_device)
     log.info("SNAC charge en %.1fs sur %s", time.time() - t0, STATE.snac_device)
+
+    # J3-bis (audit perf 2026-05-14) : pre-warm SNAC pour amortir l'init des
+    # kernels CUDA (cuDNN convolutions, etc.). Sans cela, le 1er decode SNAC
+    # de la 1re synthese paie ~50-120 ms d'init froide visible dans first_chunk.
+    # On execute un decode "jouet" sur des codes valides (zeros) :
+    # 3 codebooks SNAC, dimensions [1, n_frames * mult] avec mult=1,2,4.
+    try:
+        t_warm = time.time()
+        with torch.inference_mode():
+            warm_codes = [
+                torch.zeros((1, 1), dtype=torch.int32, device=STATE.snac_device),
+                torch.zeros((1, 2), dtype=torch.int32, device=STATE.snac_device),
+                torch.zeros((1, 4), dtype=torch.int32, device=STATE.snac_device),
+            ]
+            _ = STATE.snac.decode(warm_codes)
+            torch.cuda.synchronize()
+        log.info("SNAC pre-warm OK (%.0f ms)", (time.time() - t_warm) * 1000)
+    except Exception as e:
+        log.warning("SNAC pre-warm KO (non-fatal) : %s", e)
 
     env_voices = os.environ.get("ORPHEUS_VOICES", "").strip()
     if env_voices:
@@ -148,26 +339,20 @@ def _decode_window(window_ids: List[int]) -> Optional[np.ndarray]:
     frame = window_ids[: n_frames * N_CODEBOOKS]
 
     dev = STATE.snac_device
-    codes_0 = torch.zeros(n_frames, dtype=torch.int32, device=dev)
-    codes_1 = torch.zeros(n_frames * 2, dtype=torch.int32, device=dev)
-    codes_2 = torch.zeros(n_frames * 4, dtype=torch.int32, device=dev)
+    # v6.0 perf audit (piste #3) : vectorisation de la dissemination des codes
+    # SNAC. Avant : boucle Python + 7*n_frames assignements scalaires sur GPU
+    # (autant de lancements de kernel + sync). Apres : 1 upload CPU->GPU + 3
+    # gather indexes -> ~4 ops fusees, latence dominante des kernels eliminee.
+    # Pour n_frames=4 (regime steady-state) : 28 ops -> 3 ops.
+    ft = torch.as_tensor(frame, dtype=torch.int32, device=dev).view(n_frames, N_CODEBOOKS)
+    codes_0 = ft[:, 0].contiguous()
+    codes_1 = ft[:, [1, 4]].reshape(-1).contiguous()
+    codes_2 = ft[:, [2, 3, 5, 6]].reshape(-1).contiguous()
 
-    ft = torch.tensor(frame, dtype=torch.int32, device=dev)
-    for j in range(n_frames):
-        idx = j * N_CODEBOOKS
-        codes_0[j] = ft[idx]
-        codes_1[j * 2] = ft[idx + 1]
-        codes_1[j * 2 + 1] = ft[idx + 4]
-        codes_2[j * 4] = ft[idx + 2]
-        codes_2[j * 4 + 1] = ft[idx + 3]
-        codes_2[j * 4 + 2] = ft[idx + 5]
-        codes_2[j * 4 + 3] = ft[idx + 6]
-
-    if (
-        torch.any(codes_0 < 0) or torch.any(codes_0 > 4096)
-        or torch.any(codes_1 < 0) or torch.any(codes_1 > 4096)
-        or torch.any(codes_2 < 0) or torch.any(codes_2 > 4096)
-    ):
+    # Validation borne : un seul reduce min/max au lieu de 6 any() chaines.
+    ft_min = int(ft.min().item())
+    ft_max = int(ft.max().item())
+    if ft_min < 0 or ft_max > 4096:
         return None
 
     codes = [codes_0.unsqueeze(0), codes_1.unsqueeze(0), codes_2.unsqueeze(0)]

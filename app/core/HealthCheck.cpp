@@ -22,7 +22,9 @@ void HealthCheck::configure(ConfigManager *config)
     setupService("stt",      QUrl(config->getSTTServerUrl()));
     setupService("tts",      QUrl(config->getTTSServerUrl()));
     setupService("memory",   QUrl(config->getString("Memory",   "semantic_server_url", "ws://localhost:8771")));
-    setupService("nlu",      QUrl(config->getString("NLU",      "server_url",          "ws://localhost:8772")));
+    // Audit P2.1 : NLU 8772 retiré du probe — service mort-vivant, jamais appelé
+    // par AssistantManager (fast-path bypass + Claude direct). nluStatus() reste
+    // exposé en Q_PROPERTY pour compat QML (renvoie "unknown").
 
     // Les serveurs wakeword et vad sont mono-client (asyncio.Lock côté Python) :
     // une connexion HealthCheck persistante leur vole la session active du
@@ -196,17 +198,14 @@ void HealthCheck::sendPing(const QString &name)
         return;
     }
 
-    // NLU utilise "action" au lieu de "type"
-    QJsonObject ping;
-    if (name == QLatin1String("nlu")) {
-        ping[QStringLiteral("action")] = QStringLiteral("ping");
-    } else {
-        ping[QStringLiteral("type")] = QStringLiteral("ping");
-    }
+    // Perf: payloads pré-alloués (évite QJsonObject + QJsonDocument à chaque tick,
+    // ~10 services × 6 ticks/min = 60 allocs/min épargnées sur le main thread Qt).
+    static const QString PING_TYPE   = QStringLiteral("{\"type\":\"ping\"}");
+    static const QString PING_ACTION = QStringLiteral("{\"action\":\"ping\"}");
 
     it->pingPending = true;
     it->pingTimer.start();
-    it->client->sendJson(ping);
+    it->client->sendText(name == QLatin1String("nlu") ? PING_ACTION : PING_TYPE);
 }
 
 void HealthCheck::onServiceConnected(const QString &name)

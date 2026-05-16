@@ -34,6 +34,9 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
 set(SOURCES
     app/main.cpp
     app/core/AssistantManager.cpp
+    app/core/AssistantMessageRouter.cpp
+    app/core/AssistantErrorManager.cpp
+    app/core/AssistantLifecycleManager.cpp
     app/core/AssistantComponentFactory.cpp
     app/core/AssistantConnectionBinder.cpp
     app/core/AssistantQmlExposer.cpp
@@ -53,7 +56,6 @@ set(SOURCES
     app/core/SecurityManager.cpp
     app/core/WebSocketClient.cpp
     app/core/HealthCheck.cpp
-    app/core/ServiceManager.cpp
     app/core/ServiceSupervisor.cpp
     app/core/ServiceRegistry.cpp
     app/safeboot/SafeBootController.cpp
@@ -61,6 +63,9 @@ set(SOURCES
     app/audio/VoicePipeline.cpp
     app/audio/TTSManager.cpp
     app/audio/TTSBackendQt.cpp
+    app/audio/AudioProfiler.cpp
+    app/audio/AudioAnomalyDetector.cpp
+    app/audio/AudioAutoCorrector.cpp
     $<$<BOOL:${ENABLE_XTTS}>:app/audio/TTSBackendXTTS.cpp>
     app/audio/AudioInputQt.cpp
     app/audio/AudioDeviceManager.cpp
@@ -124,7 +129,6 @@ set(HEADERS
     app/core/SecurityManager.h
     app/core/WebSocketClient.h
     app/core/HealthCheck.h
-    app/core/ServiceManager.h
     app/core/ServiceSupervisor.h
     app/safeboot/SafeBootEnums.h
     app/safeboot/SafeBootState.h
@@ -145,6 +149,7 @@ set(HEADERS
     app/llm/ClaudeAPI.h
     app/llm/AIMemoryManager.h
     app/utils/WeatherManager.h
+    app/utils/SafeIO.h
     app/floorplan/FloorPlanEnums.h
     app/floorplan/FloorPlanItem.h
     app/floorplan/FloorPlanSerializer.h
@@ -192,8 +197,8 @@ if(ENABLE_RTAUDIO)
     set(RTAUDIO_BUILD_PYTHON OFF CACHE BOOL "" FORCE)
     add_subdirectory(rtaudio EXCLUDE_FROM_ALL)
 
-    list(APPEND SOURCES app/audio/AudioInputRtAudio.cpp)
-    list(APPEND HEADERS app/audio/AudioInputRtAudio.h)
+    list(APPEND SOURCES app/audio/AudioInputRtAudio.cpp app/audio/TTSAudioSinkRtAudio.cpp)
+    list(APPEND HEADERS app/audio/AudioInputRtAudio.h app/audio/TTSAudioSinkRtAudio.h)
 endif()
 
 # Exécutable GUI (pas de console Windows)
@@ -221,6 +226,7 @@ qt_add_qml_module(RaspberryAssistant
         qml/pages/SettingsPage.qml
         qml/pages/PipelinePage.qml
         qml/pages/HistoryPage.qml
+        qml/pages/LogsPage.qml
         qml/pages/FloorPlanPage.qml
         qml/pages/MaisonPage.qml
         qml/pages/ReseauPage.qml
@@ -235,7 +241,6 @@ qt_add_qml_module(RaspberryAssistant
         # ── Panels ──
         qml/panels/Sidebar.qml
         qml/panels/BottomBar.qml
-        qml/panels/HeaderBar.qml
         qml/panels/SafeBootPanel.qml
         # ── Theme ──
         qml/theme/Theme.qml
@@ -243,7 +248,6 @@ qt_add_qml_module(RaspberryAssistant
         qml/components/ExoButton.qml
         qml/components/ExoPanelHeader.qml
         qml/components/ExoProgressBar.qml
-        qml/components/ExoPipelineStatus.qml
         qml/components/ExoStatusIndicator.qml
         qml/components/ExoMicrophoneLevel.qml
         qml/components/ExoVisualizer.qml
@@ -261,7 +265,6 @@ qt_add_qml_module(RaspberryAssistant
         qml/components/ExoPlanProgress.qml
         qml/components/GovernancePanel.qml
         qml/components/MemoryInspector.qml
-        qml/components/ModeSwitch.qml
         qml/components/ObservabilityDashboard.qml
         qml/components/PipelineView.qml
         qml/components/VoicePipelineView.qml

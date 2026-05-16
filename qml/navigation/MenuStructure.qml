@@ -27,7 +27,8 @@ QtObject {
             label: "MAISON",
             icon: "icons/maison.svg",
             items: [
-                { name: "maison", icon: "icons/maison.svg", label: "Appareils" }
+                { name: "maison", icon: "icons/maison.svg", label: "Appareils" },
+                { name: "floorplan", icon: "icons/maison.svg", label: "Plan 2D" }
             ]
         },
         {
@@ -35,7 +36,7 @@ QtObject {
             label: "RÉSEAU",
             icon: "icons/reseau.svg",
             items: [
-                { name: "reseau", icon: "icons/reseau.svg", label: "Topologie" }
+                { name: "reseau", icon: "icons/reseau.svg", label: "Réseau" }
             ]
         },
         {
@@ -44,6 +45,14 @@ QtObject {
             icon: "icons/history.svg",
             items: [
                 { name: "history", icon: "icons/history.svg", label: "Historique" }
+            ]
+        },
+        {
+            id: "logs",
+            label: "LOGS",
+            icon: "icons/logs.svg",
+            items: [
+                { name: "logsFull", icon: "icons/logs.svg", label: "Logs runtime" }
             ]
         },
         {
@@ -66,7 +75,8 @@ QtObject {
             icon: "icons/pipeline.svg",
             items: [
                 { name: "voicePipeline", icon: "icons/pipeline.svg", label: "Voice Pipeline" },
-                { name: "observability", icon: "icons/logs.svg", label: "Logs + Metrics" }
+                { name: "observability", icon: "icons/logs.svg", label: "Logs + Metrics" },
+                { name: "logsFull", icon: "icons/logs.svg", label: "Logs runtime" }
             ]
         },
         {

@@ -69,18 +69,19 @@ public slots:
 private:
     explicit LogManager(QObject *parent = nullptr);
     ~LogManager();
-    
+
     void setupLoggingRules();
     void createLogFile();
     void rotateIfNeeded();
-    
+
     static LogManager* s_instance;
-    
+
     LogLevel m_currentLevel;
     bool m_consoleEnabled;
     bool m_fileEnabled;
     QString m_logFilePath;
-    
+    QString m_sessionTimestamp; // Ajouté : timestamp de session pour nommage
+
     // Ancienne fonction de message pour restauration
     QtMessageHandler m_oldHandler;
 
@@ -96,6 +97,8 @@ private:
     static constexpr int MAX_PIPELINE_EVENTS = 200;
     static constexpr qint64 MAX_LOG_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
     static constexpr int MAX_LOG_BACKUP_COUNT = 3;
+
+    void generateSessionTimestamp();
 };
 
 // Macros de convenance pour un usage simplifié

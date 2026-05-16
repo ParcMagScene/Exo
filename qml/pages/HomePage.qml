@@ -71,22 +71,6 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        TabBar {
-            id: sectionTabs
-            Layout.fillWidth: true
-            Layout.leftMargin: Theme.spacing8
-            Layout.rightMargin: Theme.spacing8
-            Layout.topMargin: Theme.spacing8
-            currentIndex: root.selectedSection
-
-            onCurrentIndexChanged: root.selectedSection = currentIndex
-
-            TabButton { text: "Accueil" }
-            TabButton { text: "Appareils" }
-            TabButton { text: "Réseau" }
-            TabButton { text: "Plan 2D" }
-        }
-
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -148,6 +132,7 @@ Item {
                             sourceComponent: Component {
                                 CognitiveTimeline { compact: true }
                             }
+                            onStatusChanged: if (status === Loader.Error) console.error("[QML] cognitiveTimelineLoader failed:", sourceComponent ? sourceComponent.errorString() : "unknown")
                             Behavior on SplitView.preferredHeight { NumberAnimation { duration: Theme.animNormal; easing.type: Easing.InOutQuad } }
                         }
 

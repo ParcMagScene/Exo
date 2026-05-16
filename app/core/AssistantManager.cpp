@@ -1,4 +1,7 @@
 #include "AssistantManager.h"
+#include "AssistantMessageRouter.h"
+#include "AssistantErrorManager.h"
+#include "AssistantLifecycleManager.h"
 #include "llm/AIMemoryManager.h"
 #include "ConfigManager.h"
 #include "LogManager.h"
@@ -9,6 +12,7 @@
 #include "audio/VoicePipeline.h"
 #include "audio/AudioDeviceManager.h"
 #include "utils/WeatherManager.h"
+#include "utils/SafeIO.h"
 #include "PipelineEvent.h"
 #include "PipelineTracer.h"
 #include "ContextCache.h"
@@ -41,6 +45,9 @@ AssistantManager::AssistantManager(QObject *parent)
     : QObject(parent)
     , m_isListening(false)
     , m_isInitialized(false)
+    , m_lifecycleManager(new AssistantLifecycleManager(this))
+    , m_errorManager(new AssistantErrorManager(this))
+    , m_messageRouter(new AssistantMessageRouter(this))
     , m_configManager(nullptr)
     , m_claudeApi(nullptr)
     , m_voicePipeline(nullptr)
@@ -139,12 +146,14 @@ void AssistantManager::onRepairCompleted()
 void AssistantManager::setQmlEngine(QQmlApplicationEngine *engine)
 {
     m_qmlEngine = engine;
+    if (m_lifecycleManager) m_lifecycleManager->setQmlEngine(engine);
     hAssistant() << "QML Engine configuré";
 }
 
 void AssistantManager::initConfigEarly(const QString &configPath)
 {
-    if (m_configManager) return; // déjà créé
+    if (m_lifecycleManager) m_lifecycleManager->initConfigEarly(configPath);
+    m_configManager = m_lifecycleManager ? m_lifecycleManager->configManager() : nullptr;
 
     m_configManager = new ConfigManager(this);
     if (!m_configManager->loadConfiguration(configPath)) {
@@ -160,52 +169,35 @@ void AssistantManager::initConfigEarly(const QString &configPath)
 
 bool AssistantManager::initializeWithConfig(const QString &configPath)
 {
-    if (m_isInitialized) {
-        hWarning(exoAssistant) << "AssistantManager déjà initialisé";
+    if (m_lifecycleManager && !m_isInitialized) {
+        m_lifecycleManager->initializeWithConfig(configPath);
+        m_configManager = m_lifecycleManager->configManager();
+        m_qmlEngine = m_lifecycleManager->qmlEngine();
+
+        // ── Création des composants (VoicePipeline + AudioDeviceManager
+        //    + AIMemoryManager + ClaudeAPI + WeatherManager + ...) ──
+        // Sans cet appel, m_voicePipeline reste nul, l'audio n'est jamais
+        // initialisé côté C++ et la GUI ne reçoit aucune source audio,
+        // aucun VU‑mètre, aucun historique de conversation.
+        initializeComponents();
+        setupConnections();
+        exposeToQml();
+
+        m_isInitialized = true;
+        emit initializationComplete();
+        hAssistant() << "EXO Assistant initialisé (via LifecycleManager) !";
+        sendWelcomeMessage();
+        QTimer::singleShot(2000, this, [this]() {
+            if (m_voicePipeline) {
+                hVoice() << "Démarrage de l'écoute permanente";
+                m_voicePipeline->startListening();
+            } else {
+                hWarning(exoAssistant) << "VoicePipeline NULL — startListening ignoré";
+            }
+        });
         return true;
     }
-
-    hAssistant() << "=== Initialisation d'EXO Assistant ===" ;
-
-    // 1. Créer et charger la configuration (si pas déjà fait par initConfigEarly)
-    if (!m_configManager) {
-        m_configManager = new ConfigManager(this);
-        if (!m_configManager->loadConfiguration(configPath)) {
-            hWarning(exoAssistant) << "Configuration par défaut utilisée";
-        }
-    }
-    
-    // 2. Initialiser le système de logging avec la config
-    LogManager* logManager = LogManager::instance();
-    LogManager::LogLevel logLevel = LogManager::stringToLogLevel(m_configManager->getLogLevel());
-    logManager->initialize(logLevel, true, true); // Console + fichier activés pour diagnostic
-    
-    // 3. Initialiser les composants principaux
-    initializeComponents();
-    
-    // 4. Configuration des connexions entre composants
-    setupConnections();
-    
-    // 5. Exposer les composants au QML
-    exposeToQml();
-
-    m_isInitialized = true;
-    emit initializationComplete();
-    
-    hAssistant() << "EXO Assistant initialisé avec succès !";
-    
-    // Envoyer le message d'accueil personnalisé
-    sendWelcomeMessage();
-    
-    // Démarrer l'écoute permanente après une courte pause
-    QTimer::singleShot(2000, this, [this]() {
-        if (m_voicePipeline) {
-            hVoice() << "Démarrage de l'écoute permanente";
-            m_voicePipeline->startListening();
-        }
-    });
-    
-    return true;
+    return false;
 }
 
 void AssistantManager::initializeComponents()
@@ -280,6 +272,7 @@ AudioDeviceManager* AssistantManager::audioDeviceManager() const
 
 void AssistantManager::sendMessage(const QString &message)
 {
+    if (m_messageRouter) m_messageRouter->routeMessage(message);
     if (!m_claudeApi) {
         hWarning(exoAssistant) << "sendMessage: Claude API NULL!";
         emit errorOccurred("Claude API non disponible");
@@ -460,8 +453,22 @@ void AssistantManager::onWeatherUpdate()
 
 void AssistantManager::onError(const QString &error)
 {
-    hCritical(exoAssistant) << "Erreur AssistantManager:" << error;
-    emit errorOccurred(error);
+    if (m_errorManager) m_errorManager->handleError(error);
+    // Énoncer vocalement les erreurs Claude « actionnables » pour l'utilisateur
+    if (m_voicePipeline) {
+        static const QStringList userActionablePrefixes = {
+            QStringLiteral("Crédits Anthropic épuisés"),
+            QStringLiteral("Clé API Claude invalide"),
+            QStringLiteral("Modèle Claude introuvable"),
+            QStringLiteral("Limite de requêtes Claude")
+        };
+        for (const QString &prefix : userActionablePrefixes) {
+            if (error.startsWith(prefix)) {
+                m_voicePipeline->speakSentence(error);
+                break;
+            }
+        }
+    }
 }
 
 void AssistantManager::sendWelcomeMessage()
@@ -515,8 +522,9 @@ void AssistantManager::onClaudeResponse(const QString &response)
             params[QStringLiteral("user")] = m_lastUserMessage;
             params[QStringLiteral("assistant")] = response.left(200);
             interaction[QStringLiteral("params")] = params;
-            ctxWs->sendTextMessage(QString::fromUtf8(
-                QJsonDocument(interaction).toJson(QJsonDocument::Compact)));
+            exo::safeio::wsSafeSend(ctxWs,
+                QString::fromUtf8(QJsonDocument(interaction).toJson(QJsonDocument::Compact)),
+                "context/add_interaction");
         }
         m_lastUserMessage.clear();
     }

@@ -40,7 +40,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [Calendar] %(message
 log = logging.getLogger("calendar_service")
 
 PORT = 8782
-DATA_DIR = Path(os.environ.get("EXO_FILES_DIR", r"D:\EXO\files"))
+project_root = Path(__file__).resolve().parent.parent.parent
+DATA_DIR = Path(os.environ.get("EXO_FILES_DIR", str(project_root / "files")))
 CALENDAR_FILE = DATA_DIR / "calendar.json"
 MAX_EVENTS = 5000
 

@@ -193,8 +193,16 @@ void AudioDeviceManager::onHealthCheckTimer()
 #ifdef ENABLE_RTAUDIO
     ensureRtAudio();
 
-    std::vector<DeviceInfo> newDevices;
+    // Perf P0-2: fast-path. getDeviceInfo() par device est coûteux sur WASAPI
+    // (10–50 ms cumulés). On compare d'abord la liste d'IDs; si identique au
+    // dernier scan, on ne refait PAS getDeviceInfo() et on sort tôt.
     auto ids = m_rtAudio->getDeviceIds();
+    if (ids == m_lastDeviceIds && !m_devices.empty()) {
+        // Aucune modification matérielle — sortie rapide, on saute aux checks stream.
+    } else {
+    m_lastDeviceIds = ids;
+
+    std::vector<DeviceInfo> newDevices;
     for (unsigned int id : ids) {
         auto info = m_rtAudio->getDeviceInfo(id);
         if (info.inputChannels > 0) {
@@ -224,6 +232,7 @@ void AudioDeviceManager::onHealthCheckTimer()
             setAudioStatus(m_streamOpen ? "healthy" : "unknown");
             emit audioReady();
         }
+    }
     }
 #endif
 

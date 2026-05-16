@@ -86,7 +86,7 @@ Rectangle {
                 spacing: Theme.spacing10
 
                 Image {
-                    source: "qrc:/assets/icons/app/exo.svg"
+                    source: "../../assets/icons/app/exo.svg"
                     sourceSize.width: 28
                     sourceSize.height: 28
                     width: 28
@@ -128,6 +128,18 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 50
             level: sidebar.micLevel
+        }
+
+        // ── Audio Visualizer (déplacé depuis BottomBar) ──
+        ExoVisualizer {
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.spacing8
+            Layout.rightMargin: Theme.spacing8
+            Layout.preferredHeight: 36
+            audioLevel: sidebar.micLevel
+            active: sidebar.micLevel > 0.01
+            lineColor: Theme.accent
+            lineWidth: 1.0
         }
 
         // ── Orb Visualizer ──
@@ -327,28 +339,6 @@ Rectangle {
                 }
 
                 Item { Layout.fillHeight: true }
-            }
-        }
-
-        // ── Footer : version ──
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 30
-            color: "transparent"
-
-            Rectangle {
-                anchors.top: parent.top
-                width: parent.width
-                height: 1
-                color: Theme.border
-            }
-
-            Text {
-                anchors.centerIn: parent
-                text: "EXO v30.3"
-                font.family: Theme.fontMono
-                font.pixelSize: Theme.fontMicro
-                color: Theme.textMuted
             }
         }
     }

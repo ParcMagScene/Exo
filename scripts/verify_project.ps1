@@ -5,7 +5,7 @@
 
 Write-Host "Vérification finale du projet EXO v30.3..." -ForegroundColor Cyan
 
-$projectRoot = Split-Path -Parent $PSScriptRoot
+$projectRoot = "project"
 
 # Vérification des fichiers essentiels
 Write-Host "`n=== VERIFICATION DES FICHIERS ESSENTIELS ===" -ForegroundColor Yellow

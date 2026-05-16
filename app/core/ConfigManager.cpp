@@ -1,5 +1,6 @@
 #include "ConfigManager.h"
 #include "LogManager.h"
+#include "utils/SafeIO.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -26,8 +27,8 @@ ConfigManager::ConfigManager(QObject *parent)
 
     // Force user settings into D:/EXO/config (no AppData leak)
     const QString ssdRoot = qEnvironmentVariable("EXO_SSD_ROOT", QStringLiteral("D:/EXO"));
-    const QString cfgDir  = ssdRoot + QStringLiteral("/config");
-    QDir().mkpath(cfgDir);
+    const QString cfgDir  = QStringLiteral("D:/EXO/config");
+    exo::safeio::ensureDir(cfgDir, "ConfigManager::ctor");
     m_userSettings = new QSettings(cfgDir + QStringLiteral("/user_config.ini"),
                                    QSettings::IniFormat, this);
     m_networkManager = new QNetworkAccessManager(this);
@@ -126,7 +127,7 @@ bool ConfigManager::loadConfiguration(const QString &configPath)
             QDir(exeDir).absoluteFilePath("../../" + configPath),
             QDir(exeDir).absoluteFilePath("../../../" + configPath),
             QDir(cwd).absoluteFilePath(configPath),
-            QDir(cwd).absoluteFilePath("config/assistant.conf")
+            QStringLiteral("D:/EXO/config/assistant.conf")
         };
         for (const QString &candidate : candidates) {
             if (QFile::exists(candidate)) {
@@ -186,7 +187,7 @@ void ConfigManager::setDefaultValues()
     // Force default settings into D:/EXO/config (no AppData leak)
     const QString ssdRoot2 = qEnvironmentVariable("EXO_SSD_ROOT", QStringLiteral("D:/EXO"));
     const QString cfgDir2  = ssdRoot2 + QStringLiteral("/config");
-    QDir().mkpath(cfgDir2);
+    exo::safeio::ensureDir(cfgDir2, "ConfigManager::setDefaultValues");
     m_settings = new QSettings(cfgDir2 + QStringLiteral("/default.ini"),
                                QSettings::IniFormat, this);
     m_isLoaded = true;

@@ -21,8 +21,11 @@
 #include "core/WebSocketClient.h"
 #include <memory>
 #include <vector>
+#include <deque>
+#include <array>
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <cmath>
 #include <QVariantList>
 #include "core/PipelineEvent.h"
@@ -211,6 +214,9 @@ private:
     bool m_recording = false;
     QString m_language = "fr";
     int m_beamSize = 1;
+    QTimer *m_finalTimer = nullptr;       // P1.1 audit : timeout après 'end' envoyé
+    static constexpr int FINAL_TIMEOUT_MS = 12000; // 12s pour réception {type:final}
+    std::atomic<uint32_t> m_seq{0}; // Numéro de séquence (atomic : audio callback + main thread)
 };
 
 // ─────────────────────────────────────────────────────
@@ -222,7 +228,8 @@ enum class PipelineState {
     Listening,        // capture utterance en cours
     Transcribing,     // STT en cours (streaming vers stt_server)
     Thinking,         // Claude / NLU processing
-    Speaking          // TTS playing
+    Speaking,         // TTS playing
+    Error             // état d'erreur global
 };
 
 // ─────────────────────────────────────────────────────
@@ -243,6 +250,12 @@ class VoicePipeline : public QObject
 public:
     explicit VoicePipeline(QObject *parent = nullptr);
     ~VoicePipeline();
+
+    // Validation stricte des transitions d'état
+    static bool isValidTransition(PipelineState from, PipelineState to);
+
+    // Forcer une transition d'erreur
+    void setErrorState(const QString &errMsg);
 
     // ── lifecycle ──
     bool initAudio();
@@ -382,6 +395,29 @@ private:
     CircularAudioBuffer m_ringBuf;
     static constexpr size_t MAX_UTTERANCE_SAMPLES = 16000 * 30; // 30 s
 
+    // ── Pre-roll : derniers ~400 ms d'audio en Idle, injectes au debut
+    // de l'utterance pour ne pas perdre le tout debut de parole (le VAD a
+    // besoin de SPEECH_START_FRAMES pour confirmer => 40-60 ms perdus, plus
+    // le temps de montee de l'enveloppe vocale). Sans preroll, des mots
+    // courts en debut de phrase sont coupes ("Combien" → "").
+    //
+    // J4-bis (audit perf 2026-05-14) : remplacement de std::deque<int16_t>
+    // par un ring buffer de taille fixe (std::array). Le deque effectuait
+    // un push_back par echantillon (~256-512 par chunk toutes les 32 ms)
+    // et reallouait des segments sous pression heap, contribuant aux
+    // spikes residuels jusqu'a 12 ms dans processAudioChunk(). Le ring
+    // buffer permet un push en 1 ou 2 std::memcpy, zero allocation, zero
+    // mutex (acces single-thread depuis le callback audio uniquement).
+    static constexpr int PREROLL_MS = 400;
+    static constexpr size_t PREROLL_SAMPLES = static_cast<size_t>(16000) * PREROLL_MS / 1000;
+    std::array<int16_t, PREROLL_SAMPLES> m_prerollBuf{};
+    size_t m_prerollHead = 0;   // prochain index d'ecriture
+    size_t m_prerollSize = 0;   // nb d'echantillons utiles (<= PREROLL_SAMPLES)
+
+    // J4-bis : throttle d'emission des frames de visualisation (~12 Hz),
+    // reduit la pression heap (allocations QVariant) sans degrader l'UX.
+    QElapsedTimer m_vizClock;
+
     // ── TTS ──
     TTSManager *m_ttsManager = nullptr;
     QString m_ttsServerUrl;  // saved at initTTS() for setTTSEngine()
@@ -397,11 +433,11 @@ private:
     QElapsedTimer m_lastIgnoredNoiseClock;
     QElapsedTimer m_interactionClock;  // v5.2: end-to-end latency measurement
     bool m_vadInteraction = false;       // true when current interaction was triggered by VAD
-    static constexpr int TTS_GUARD_MS           = 400;   // v5.2: 400ms anti-echo guard (was 1000)
+    static constexpr int TTS_GUARD_MS           = 1500;  // 1500ms anti-echo guard (était 400) — absorbe le résidu acoustique post-TTS et évite le triple-timeout STT en cascade
     static constexpr int WAKE_COOLDOWN_MS       = 800;   // v5.2: 800ms cooldown (was 2000)
     static constexpr int UTTERANCE_TIMEOUT_MS   = 5500;  // réduit les pics STT liés à l'auto-timeout
     static constexpr int POST_WAKE_GRACE_MS     = 150;   // v5.2: 150ms grace (was 400)
-    static constexpr int CONVERSATION_TIMEOUT_MS = 10000; // v5.2: 10s conversation mode (was 15000)
+    static constexpr int CONVERSATION_TIMEOUT_MS = 90000; // 90s mode conversation — assez long pour plusieurs échanges et résiste aux freezes STT/restart whisper sans avoir à répéter "exo"
     static constexpr int TRANSCRIBE_TIMEOUT_MS  = 20000; // v25.1: 20s STT timeout (beam-size latency)
     static constexpr int SPEAKING_WATCHDOG_MS    = 20000; // v5.2: 20s watchdog (was 30000)
     static constexpr int MIN_UTTERANCE_MS       = 500;   // permet de couper plus tôt après la fin de parole
@@ -417,6 +453,12 @@ private:
     QWebSocket *m_ws = nullptr;
 
     // ── Audio format constants ──
+    // 16 kHz : contrainte des modèles ML embarqués
+    //   • Silero VAD       — entraîné 16 kHz mono
+    //   • OpenWakeWord     — modèles ONNX 16 kHz
+    //   • Whisper.cpp STT  — encodeur 16 kHz natif
+    // Orpheus TTS sort en 24 kHz → resample côté QAudioSink (overhead < 1 ms).
+    // Audit P3.5 : ne pas modifier sans réentraîner les 3 modèles.
     static constexpr int SAMPLE_RATE = 16000;
     static constexpr int CHUNK_MS    = 20;
     static constexpr int CHUNK_SAMPLES = SAMPLE_RATE * CHUNK_MS / 1000; // 320

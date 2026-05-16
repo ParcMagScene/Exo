@@ -97,6 +97,7 @@ private:
         WebSocketClient *client  = nullptr;
         QTimer          *timeout = nullptr;
         QTimer          *poll    = nullptr;
+        int              pollIntervalMs = 500;  // backoff exponentiel
     };
     QMap<QString, ReadinessProbe> m_probes;
 

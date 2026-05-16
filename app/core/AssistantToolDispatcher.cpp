@@ -2,11 +2,13 @@
 
 #include "ConfigManager.h"
 #include "LogManager.h"
+#include "MetricsManager.h"
 #include "PipelineEvent.h"
 #include "ContextCache.h"
 #include "llm/ClaudeAPI.h"
 #include "audio/VoicePipeline.h"
 #include "utils/WeatherManager.h"
+#include "utils/SafeIO.h"
 
 #include <QWebSocket>
 #include <QWebSocketProtocol>
@@ -17,6 +19,7 @@
 #include <QLocale>
 #include <QUuid>
 #include <QSharedPointer>
+#include <QDateTime>
 
 namespace {
 static constexpr int NETWORK_SCAN_FAST_MS = 30000;
@@ -24,6 +27,8 @@ static constexpr int NETWORK_SCAN_FULL_MS = 120000;
 static constexpr int HOMEGRAPH_TIMEOUT_MS = 60000;
 static constexpr int DEVICE_COMMAND_TIMEOUT_MS = 15000;
 static constexpr int SCENARIO_TIMEOUT_MS = 30000;
+// Audit P1.2/P2.2 : aligner avec Executor step (30s) + marge réseau
+static constexpr int TOOL_CALL_TIMEOUT_MS = 35000;
 }
 
 AssistantToolDispatcher::AssistantToolDispatcher(QObject *parent)
@@ -66,8 +71,9 @@ void AssistantToolDispatcher::requestNetworkScan(bool fast)
     request[QStringLiteral("action")] = fast ? QStringLiteral("scan_fast")
                                               : QStringLiteral("scan");
     request[QStringLiteral("params")] = QJsonObject();
-    ws->sendTextMessage(QString::fromUtf8(
-        QJsonDocument(request).toJson(QJsonDocument::Compact)));
+    exo::safeio::wsSafeSend(ws,
+        QString::fromUtf8(QJsonDocument(request).toJson(QJsonDocument::Compact)),
+        "network/scan");
 
     hAssistant() << "GUI network scan:" << (fast ? "fast" : "full");
 
@@ -105,8 +111,9 @@ void AssistantToolDispatcher::requestHomeGraph()
     QJsonObject request;
     request[QStringLiteral("action")] = QStringLiteral("gui_state");
     request[QStringLiteral("params")] = QJsonObject();
-    ws->sendTextMessage(QString::fromUtf8(
-        QJsonDocument(request).toJson(QJsonDocument::Compact)));
+    exo::safeio::wsSafeSend(ws,
+        QString::fromUtf8(QJsonDocument(request).toJson(QJsonDocument::Compact)),
+        "homegraph/gui_state");
 
     hAssistant() << "GUI HomeGraph state requested";
 
@@ -150,8 +157,9 @@ void AssistantToolDispatcher::requestDeviceCommand(const QString &deviceId,
     QJsonObject request;
     request[QStringLiteral("action")] = QStringLiteral("apply_command");
     request[QStringLiteral("params")] = cmdParams;
-    ws->sendTextMessage(QString::fromUtf8(
-        QJsonDocument(request).toJson(QJsonDocument::Compact)));
+    exo::safeio::wsSafeSend(ws,
+        QString::fromUtf8(QJsonDocument(request).toJson(QJsonDocument::Compact)),
+        "homegraph/apply_command");
 
     hAssistant() << "GUI device command:" << deviceId << command;
 
@@ -190,8 +198,9 @@ void AssistantToolDispatcher::requestRunScenario(const QString &name)
     QJsonObject request;
     request[QStringLiteral("action")] = QStringLiteral("run_scenario");
     request[QStringLiteral("params")] = scParams;
-    ws->sendTextMessage(QString::fromUtf8(
-        QJsonDocument(request).toJson(QJsonDocument::Compact)));
+    exo::safeio::wsSafeSend(ws,
+        QString::fromUtf8(QJsonDocument(request).toJson(QJsonDocument::Compact)),
+        "homegraph/run_scenario");
 
     hAssistant() << "GUI run scenario:" << name;
 
@@ -222,23 +231,55 @@ void AssistantToolDispatcher::handleToolCall(const QString &toolUseId,
     QJsonObject result;
 
     if (toolName == QLatin1String("get_weather")) {
-        if (m_contextCache && m_contextCache->has("weather")) {
-            result = m_contextCache->get("weather");
+        const QString requestedCity = arguments.value(QStringLiteral("city")).toString().trimmed();
+        const QString defaultCity = m_configManager ? m_configManager->getWeatherCity() : QString();
+        const bool isDefaultCity = requestedCity.isEmpty()
+            || requestedCity.compare(defaultCity, Qt::CaseInsensitive) == 0;
+
+        // Cache séparé par ville (clé "weather:<city>") pour éviter qu'une
+        // réponse Paris ne « pollue » les requêtes pour d'autres villes.
+        const QString cacheKey = QStringLiteral("weather:%1")
+            .arg(isDefaultCity ? defaultCity.toLower() : requestedCity.toLower());
+
+        if (m_contextCache && m_contextCache->has(cacheKey)) {
+            result = m_contextCache->get(cacheKey);
             result[QStringLiteral("cached")] = true;
             m_claudeApi->sendToolResult(toolUseId, result);
             return;
         }
-        if (m_weatherManager) {
-            result[QStringLiteral("status")] = QStringLiteral("success");
+
+        // Cas 1 : ville par défaut → on peut servir l'état déjà rafraîchi
+        // périodiquement par WeatherManager (latence quasi nulle).
+        if (isDefaultCity && m_weatherManager) {
+            result[QStringLiteral("status")]      = QStringLiteral("success");
             result[QStringLiteral("temperature")] = m_weatherManager->temperature();
             result[QStringLiteral("description")] = m_weatherManager->description();
-            result[QStringLiteral("city")] = m_configManager ? m_configManager->getWeatherCity() : QString();
+            result[QStringLiteral("city")]        = defaultCity;
             if (m_contextCache)
-                m_contextCache->set("weather", result, 60000);
-        } else {
-            result[QStringLiteral("status")] = QStringLiteral("error");
-            result[QStringLiteral("message")] = QStringLiteral("Service meteo non disponible");
+                m_contextCache->set(cacheKey, result, 60000);
+            m_claudeApi->sendToolResult(toolUseId, result);
+            return;
         }
+
+        // Cas 2 : ville arbitraire → requête one-shot async vers OpenWeatherMap.
+        if (m_weatherManager) {
+            ClaudeAPI *api = m_claudeApi;
+            ContextCache *cache = m_contextCache;
+            QString useId = toolUseId;
+            QString keyCopy = cacheKey;
+            m_weatherManager->fetchWeatherFor(requestedCity,
+                [api, cache, useId, keyCopy](const QJsonObject &res) {
+                    if (cache && res.value(QStringLiteral("status")).toString()
+                                    == QLatin1String("success")) {
+                        cache->set(keyCopy, res, 60000);
+                    }
+                    if (api) api->sendToolResult(useId, res);
+                });
+            return;
+        }
+
+        result[QStringLiteral("status")] = QStringLiteral("error");
+        result[QStringLiteral("message")] = QStringLiteral("Service meteo non disponible");
         m_claudeApi->sendToolResult(toolUseId, result);
         return;
     }
@@ -501,6 +542,9 @@ void AssistantToolDispatcher::dispatchToolToService(const QString &service,
     }
 
     m_pendingToolCalls.insert(service, toolUseId);
+    // Audit P3.4 : tracker timestamp départ pour calcul durée réponse
+    m_pendingStartTimes.insert(service, QDateTime::currentMSecsSinceEpoch());
+    MetricsManager::instance()->increment(QStringLiteral("tool.calls.") + service);
 
     QJsonObject request;
     request[QStringLiteral("action")] = action;
@@ -512,9 +556,11 @@ void AssistantToolDispatcher::dispatchToolToService(const QString &service,
     hAssistant() << "Tool dispatch:" << action << "->" << service
                  << "(tool_use_id:" << toolUseId << ")";
 
-    QTimer::singleShot(15000, this, [this, service, toolUseId]() {
+    QTimer::singleShot(TOOL_CALL_TIMEOUT_MS, this, [this, service, toolUseId]() {
         if (m_pendingToolCalls.value(service) == toolUseId) {
             m_pendingToolCalls.remove(service);
+            m_pendingStartTimes.remove(service);
+            MetricsManager::instance()->increment(QStringLiteral("tool.timeouts.") + service);
             QJsonObject err;
             err[QStringLiteral("status")] = QStringLiteral("error");
             err[QStringLiteral("message")] =
@@ -548,6 +594,18 @@ void AssistantToolDispatcher::onToolServiceMessage(const QString &service,
     }
 
     m_pendingToolCalls.remove(service);
+
+    // Audit P3.4 : enregistrer durée réponse + statut succès/échec
+    const qint64 startMs = m_pendingStartTimes.take(service);
+    if (startMs > 0) {
+        const qint64 durationMs = QDateTime::currentMSecsSinceEpoch() - startMs;
+        MetricsManager::instance()->recordValue(
+            QStringLiteral("tool.duration_ms.") + service, static_cast<double>(durationMs));
+    }
+    const bool ok = msg.value(QStringLiteral("ok")).toBool();
+    MetricsManager::instance()->increment(
+        ok ? (QStringLiteral("tool.success.") + service)
+           : (QStringLiteral("tool.errors.") + service));
 
     if (m_guiToolCalls.remove(toolUseId)) {
         QJsonObject result;

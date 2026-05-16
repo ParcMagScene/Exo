@@ -16,7 +16,11 @@ from typing import Any, Optional
 _request_id: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 _session_id: ContextVar[Optional[str]] = ContextVar("session_id", default=None)
 
-LOG_DIR = Path(os.environ.get("EXO_LOG_DIR", os.environ.get("EXO_SSD_ROOT", r"D:\EXO") + r"\project\logs"))
+LOG_DIR = Path(
+    os.environ.get("EXO_LOG_DIR")
+    or os.environ.get("EXO_LOGS_DIR")
+    or (os.environ.get("EXO_SSD_ROOT", r"D:\EXO") + r"\logs")
+)
 
 
 class JSONFormatter(logging.Formatter):

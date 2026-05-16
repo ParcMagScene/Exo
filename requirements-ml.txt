@@ -5,8 +5,9 @@
 # STT (stt_server.py)
 faster-whisper>=1.0
 
-# TTS (tts_server.py) — CosyVoice 2
-# Install CosyVoice: pip install -e . from cloned https://github.com/FunAudioLLM/CosyVoice
+# TTS : Orpheus 3B FR GGUF Q8 (services/orpheus/server_ws.py)
+# Le serveur Orpheus utilise sa propre venv : services/orpheus/venv/
+# (llama-cpp-python CUDA + snac). Aucune dependance TTS dans cette requirements.
 hyperpyyaml>=1.2
 conformer
 modelscope

@@ -8,20 +8,32 @@
 Write-Host "Lancement d'EXO Assistant..." -ForegroundColor Cyan
 Write-Host "=== Configuration Multi-GPU ===" -ForegroundColor Magenta
 Write-Host "  GUI (Qt/QML)  : AMD (affichage)" -ForegroundColor Green
-Write-Host "  TTS (CosyVoice2): CUDA -> RTX 3070" -ForegroundColor Green
+Write-Host "  TTS (Orpheus 3B FR): CUDA -> RTX 3070" -ForegroundColor Green
 Write-Host "  STT (Whisper)  : Vulkan -> RTX 3070" -ForegroundColor Green
 Write-Host "================================" -ForegroundColor Magenta
 
-# --- Racines projet ---
-$projectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ssdRoot    = if ($env:EXO_ROOT) { $env:EXO_ROOT } else { "D:\EXO" }
-$pythonSTT  = "$projectDir\.venv_stt_tts\Scripts\python.exe"
+
+# --- Forcer le working directory à D:/EXO/ ---
+if ((Get-Location).Path -replace '\\','/') -ne 'D:/EXO') {
+    Write-Host "ERREUR : Ce lanceur doit être exécuté depuis D:/EXO/." -ForegroundColor Red
+    Set-Location "D:/EXO/"
+    if ((Get-Location).Path -replace '\\','/') -ne 'D:/EXO') {
+        Write-Host "Impossible de corriger le working directory. Arrêt." -ForegroundColor Red
+        exit 1
+    } else {
+        Write-Host "Working directory corrigé en D:/EXO/." -ForegroundColor Yellow
+    }
+}
+
+$projectDir = 'D:/EXO'
+$ssdRoot    = 'D:/EXO'
+$pythonSTT  = "$projectDir/.venv_stt_tts/Scripts/python.exe"
 
 # --- PYTHONPATH (requis par shared/, tts/, stt/, etc.) ---
 $env:PYTHONPATH = "$projectDir\python"
 
 # --- Dossier logs ---
-$logDir = "$ssdRoot\logs"
+$logDir = "$ssdRoot/logs"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
 
 # --- Idempotence: tuer les anciennes instances de launch_exo.ps1 (zombies tenant un Tee-Object) ---
@@ -141,28 +153,31 @@ function Wait-ForServiceHealth {
 
 # --- TTS GPU CUDA (RTX 3070) ---
 # Pipeline TTS : selectionnable via $env:EXO_TTS_ENGINE
-#   "cosyvoice" (defaut) -> python/tts/tts_server_streaming.py (.venv_stt_tts)
-#   "orpheus"            -> services/orpheus/server_ws.py     (services/orpheus/venv)
+#   "orpheus" (defaut) -> services/orpheus/server_ws.py     (services/orpheus/venv)
+#   "xtts"             -> python/tts/tts_server_streaming.py (.venv_stt_tts)
 # Les deux exposent le MEME protocole WS sur le MEME port (8767) + /health HTTP.
 $ttsPort = 8767
-$ttsEngine = ($env:EXO_TTS_ENGINE | ForEach-Object { $_.ToLower() })
-if (-not $ttsEngine) { $ttsEngine = 'cosyvoice' }
+$ttsEngineRaw = $env:EXO_TTS_ENGINE
+if ([string]::IsNullOrWhiteSpace($ttsEngineRaw)) {
+    $ttsEngine = 'orpheus'
+} else {
+    $ttsEngine = $ttsEngineRaw.ToLower()
+}
 
 $ttsRunning = Get-NetTCPConnection -LocalPort $ttsPort -ErrorAction SilentlyContinue |
     Where-Object { $_.State -eq 'Listen' }
 if (-not $ttsRunning) {
-    if ($ttsEngine -eq 'orpheus') {
+    if ($ttsEngine -eq 'xtts') {
+        $ttsScript = "$projectDir\python\tts\tts_server_streaming.py"
+        $ttsPython = $pythonSTT
+        $ttsLabel  = "XTTS CUDA - RTX 3070"
+        $ttsTimeout = 90
+    } else {
         $ttsScript = "$projectDir\services\orpheus\server_ws.py"
         $ttsPython = "$projectDir\services\orpheus\venv\Scripts\python.exe"
         $ttsLabel  = "Orpheus 3B FR (GGUF Q8) CUDA"
         # Timeout : load LLM ~3s + SNAC ~2s + warmup ~5s + marge => 60s.
         $ttsTimeout = 60
-    } else {
-        $ttsScript = "$projectDir\python\tts\tts_server_streaming.py"
-        $ttsPython = $pythonSTT
-        $ttsLabel  = "CosyVoice2 CUDA - RTX 3070"
-        # Timeout : 35s load CosyVoice2 + 10s warmup + marge => 90s.
-        $ttsTimeout = 90
     }
     if ((Test-Path $ttsPython) -and (Test-Path $ttsScript)) {
         Write-Host "Demarrage TTS streaming ($ttsLabel)..." -ForegroundColor Yellow
@@ -236,16 +251,16 @@ if (Test-Path $bundledQtCore) {
 }
 
 # --- Variables d'environnement EXO (chemins SSD) ---
+
 $env:EXO_SSD_ROOT        = $ssdRoot
-$env:EXO_WHISPER_MODELS = "$ssdRoot\models\whisper"
-$env:EXO_WHISPERCPP_BIN = "$ssdRoot\whispercpp\build_vk\bin\Release"
-$env:EXO_COSYVOICE_MODELS = "$ssdRoot\models\cosyvoice_fr"
-$env:EXO_FAISS_DIR      = "$ssdRoot\faiss\semantic_memory"
-$env:EXO_WAKEWORD_MODELS = "$ssdRoot\models\wakeword"
-$env:EXO_FILES_DIR       = "$ssdRoot\files"
-$env:HF_HOME            = "$ssdRoot\cache\huggingface"
-$env:TRANSFORMERS_CACHE  = "$ssdRoot\cache\huggingface\hub"
-$env:TORCH_HOME          = "$ssdRoot\cache\torch"
+$env:EXO_WHISPER_MODELS = "$ssdRoot/models/whisper"
+$env:EXO_WHISPERCPP_BIN = "$ssdRoot/whispercpp/build_vk/bin/Release"
+$env:EXO_FAISS_DIR      = "$ssdRoot/faiss/semantic_memory"
+$env:EXO_WAKEWORD_MODELS = "$ssdRoot/models/wakeword"
+$env:EXO_FILES_DIR       = "$ssdRoot/files"
+$env:HF_HOME            = "$ssdRoot/cache/huggingface"
+$env:TRANSFORMERS_CACHE  = "$ssdRoot/cache/huggingface/hub"
+$env:TORCH_HOME          = "$ssdRoot/cache/torch"
 Write-Host "Variables EXO configurees (SSD: $ssdRoot)" -ForegroundColor Green
 
 # Charger les variables d'environnement depuis .env

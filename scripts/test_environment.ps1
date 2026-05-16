@@ -39,6 +39,7 @@ function Test-Component {
 
 # Rafraichir l'environnement
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+$projectRoot = "project"
 
 Write-Host "`n=== TESTS DES OUTILS DE BASE ===" -ForegroundColor Magenta
 

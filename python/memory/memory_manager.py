@@ -40,9 +40,10 @@ except ImportError:
 log = logging.getLogger("memory.manager")
 
 DEFAULT_MODEL = "all-MiniLM-L6-v2"
+project_root = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DATA_DIR = os.environ.get(
     "EXO_FAISS_DIR",
-    r"D:\EXO\faiss\semantic_memory",
+    str(project_root / "faiss" / "semantic_memory"),
 )
 
 

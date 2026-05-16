@@ -29,7 +29,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "retries": 1,
     },
     "tts": {
-        "backend": "cosyvoice2",
+        "backend": "orpheus",
         "voice": "",
         "language": "fr",
         "timeout_s": 3,
@@ -53,7 +53,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     },
     "security": {
         "audit_log_enabled": True,
-        "permissions_file": "config/permissions.json",
+        "permissions_file": "D:/EXO/config/permissions.json",
     },
     "logs": {
         "level": "DEBUG",
@@ -74,7 +74,7 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     },
 }
 
-CONFIG_PATH = Path(os.environ.get("EXO_CONFIG", "config/exo_v9.json"))
+CONFIG_PATH = Path(os.environ.get("EXO_CONFIG", "D:/EXO/config/exo_v9.json"))
 
 
 class ConfigManager:
@@ -175,6 +175,9 @@ class ConfigManager:
 
     def stop_watching(self) -> None:
         self._watching = False
+        t = getattr(self, "_watch_thread", None)
+        if t is not None and t.is_alive():
+            t.join(timeout=5.0)
 
     def _watch_loop(self, interval_s: float) -> None:
         while self._watching:

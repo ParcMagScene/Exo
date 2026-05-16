@@ -23,7 +23,7 @@ Rectangle {
         { id: "recognition",    label: "Reconnaissance",  icon: "💬", mapModule: "stt",            desc: "Speech-to-Text (Whisper)" },
         { id: "understanding",  label: "Compréhension",   icon: "🧠", mapModule: "nlu",            desc: "Natural Language Understanding" },
         { id: "reasoning",      label: "Raisonnement",    icon: "⚡", mapModule: "claude",         desc: "LLM (Claude Opus)" },
-        { id: "synthesis",      label: "Synthèse",        icon: "🔊", mapModule: "tts",            desc: "Text-to-Speech (CosyVoice2)" },
+        { id: "synthesis",      label: "Synthèse",        icon: "🔊", mapModule: "tts",            desc: "Text-to-Speech (Orpheus 3B FR)" },
         { id: "supervision",    label: "Supervision",     icon: "🛡", mapModule: "orchestrator",   desc: "Pipeline orchestration" }
     ]
 

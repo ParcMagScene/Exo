@@ -244,10 +244,12 @@ bool SafeBootAutoRepair::restartService(const QString &serviceName)
 
     // Variables d'environnement EXO
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    const QString ssd = qEnvironmentVariable("EXO_SSD_ROOT", QStringLiteral("D:/EXO"));
+    // Résolution dynamique du chemin racine project/
+    QDir projectDir = QDir(QCoreApplication::applicationDirPath());
+    projectDir.cdUp(); projectDir.cdUp(); // build/Debug → racine
+    const QString ssd = qEnvironmentVariable("EXO_SSD_ROOT", projectDir.absolutePath());
     env.insert(QStringLiteral("EXO_WHISPER_MODELS"),  ssd + "/models/whisper");
     env.insert(QStringLiteral("EXO_WHISPERCPP_BIN"),  ssd + "/whispercpp/build_vk/bin/Release");
-    env.insert(QStringLiteral("EXO_COSYVOICE_MODELS"), ssd + "/models/cosyvoice_fr");
     env.insert(QStringLiteral("EXO_FAISS_DIR"),        ssd + "/faiss/semantic_memory");
     env.insert(QStringLiteral("EXO_WAKEWORD_MODELS"),  ssd + "/models/wakeword");
     env.insert(QStringLiteral("HF_HOME"),              ssd + "/cache/huggingface");
@@ -255,12 +257,12 @@ bool SafeBootAutoRepair::restartService(const QString &serviceName)
     env.insert(QStringLiteral("EXO_SSD_ROOT"),         ssd);
     env.insert(QStringLiteral("EXO_FILES_DIR"),        ssd + "/files");
     env.insert(QStringLiteral("TORCH_HOME"),           ssd + "/cache/torch");
-    const QString pythonRoot = QDir(projectDir()).absoluteFilePath(QStringLiteral("python"));
+    const QString pythonRoot = QDir(projectDir.absolutePath()).absoluteFilePath(QStringLiteral("python"));
     const QString pythonPath = env.value(QStringLiteral("PYTHONPATH"));
     env.insert(QStringLiteral("PYTHONPATH"),
                pythonPath.isEmpty()
                    ? pythonRoot
-                   : pythonRoot + QDir::listSeparator() + pythonPath);
+                   : pythonRoot + QChar(QLatin1Char(';')) + pythonPath);
     proc->setProcessEnvironment(env);
 
     // Logs
@@ -297,7 +299,9 @@ bool SafeBootAutoRepair::restartService(const QString &serviceName)
 bool SafeBootAutoRepair::clearServiceCache(const QString &serviceName)
 {
     // Les microservices EXO stockent des caches dans D:/EXO/cache/<service>/
-    const QString ssd = qEnvironmentVariable("EXO_SSD_ROOT", QStringLiteral("D:/EXO"));
+    QDir projectDir = QDir(QCoreApplication::applicationDirPath());
+    projectDir.cdUp(); projectDir.cdUp();
+    const QString ssd = qEnvironmentVariable("EXO_SSD_ROOT", projectDir.absolutePath());
     QDir cacheDir(ssd + "/cache/" + serviceName.toLower());
 
     if (!cacheDir.exists()) return true; // Pas de cache → OK

@@ -94,7 +94,7 @@ class EmergentReasoningEngine:
                                       for o in observations[:5]]})
                 inferred.append({"type": "causal", "result": causal})
             except Exception:
-                pass
+                log.debug("causal inference failed", exc_info=True)
 
         # Synthesize solution paths
         paths = self._synthesize_paths(problem, observations, kg_context,

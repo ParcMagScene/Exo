@@ -1,4 +1,4 @@
-"""
+﻿"""
 wakeword_server.py — EXO OpenWakeWord Server
 
 WebSocket server that receives PCM16 audio chunks and detects
@@ -19,8 +19,15 @@ Dependencies:
 
 from __future__ import annotations
 
+# Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
+import os
+os.chdir("D:/EXO/")
+
 import asyncio
-import json
+try:
+    import ujson as json  # v6.0 perf : 3-5x plus rapide que stdlib (audit perf)
+except ImportError:
+    import json
 import logging
 import os
 import sys
@@ -34,12 +41,34 @@ import numpy as np
 from shared.singleton_guard import ensure_single_instance
 from shared.base_service import init_v9, json_loads, json_dumps
 
+
+# --- Logging EXO centralisé (identique C++) ---
+def _get_exo_logfile():
+    # Correction : tous les logs doivent aller dans D:/EXO/logs/
+    log_dir = os.environ.get("EXO_LOGS_DIR", "D:/EXO/logs")
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    ts = os.environ.get("EXO_SESSION_TIMESTAMP")
+    if not ts:
+        from datetime import datetime
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(log_dir, f"exo_{ts}.log")
+
+logfile = _get_exo_logfile()
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [WW] %(levelname)s %(message)s",
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("exo.wakeword")
+_file_handler = logging.FileHandler(logfile, encoding="utf-8", delay=False)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter("%(asctime)s [WW] %(levelname)s %(message)s", datefmt="%H:%M:%S"))
+_file_handler.flush = _file_handler.stream.flush
+logger.addHandler(_file_handler)
+logger.propagate = True
+logger.info("=== EXO WAKEWORD_SERVER STARTUP ===")
+_file_handler.flush()
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -53,8 +82,8 @@ CHUNK_SAMPLES = 1280
 DEFAULT_THRESHOLD = 0.7
 # Cooldown after detection to prevent re-triggering during speech (seconds)
 DETECTION_COOLDOWN_S = 3.0
-# Custom model directory (SSD) — falls back to built-in models
-EXO_WAKEWORD_DIR = Path(os.environ.get("EXO_WAKEWORD_MODELS", r"D:\EXO\models\wakeword"))
+    # Correction : tous les modèles doivent être dans D:/EXO/models/wakeword
+EXO_WAKEWORD_DIR = Path("D:/EXO/models/wakeword")
 DEFAULT_MODELS = ["hey_jarvis"]
 
 
@@ -206,7 +235,11 @@ class WakeWordSession:
 
             self._chunk_start_time = time.monotonic()
             pcm = np.frombuffer(bytes(chunk), dtype=np.int16)
-            scores = self.engine.process_chunk(pcm)
+            # Run ONNX inference in default executor to avoid blocking event loop.
+            loop = asyncio.get_running_loop()
+            scores = await loop.run_in_executor(
+                None, self.engine.process_chunk, pcm
+            )
 
             # Only send if any model exceeds threshold + cooldown elapsed
             now = time.monotonic()
@@ -290,4 +323,10 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
+    except Exception:
+        logger.exception("WakeWord server fatal error")
+        sys.exit(1)
