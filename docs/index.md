@@ -22,6 +22,10 @@ Voir aussi : [README.md](../README.md) (racine), [PROMPT_MAITRE.md](../PROMPT_MA
 ## Architecture
 
 - [architecture/](architecture/) — Graphes et structure du système
+- [architecture/services.md](architecture/services.md) — Inventaire des services (ports, venvs, fichiers)
+- [architecture/pipeline.md](architecture/pipeline.md) — FSM vocale, flux WS, budgets de latence
+- [architecture/modules.md](architecture/modules.md) — Index des modules Python + C++
+- [architecture/graph.md](architecture/graph.md) — Graphe de dépendances
 - [implementation/](implementation/) — Guides d''implémentation
 - [troubleshooting/](troubleshooting/) — Résolution d''incidents
 

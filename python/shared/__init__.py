@@ -26,6 +26,7 @@ from .config_validator import (  # noqa: F401
     ConfigValidationReport,
     validate_config_file,
 )
+from .log_event import log_event  # noqa: F401
 
 # Hardening 2026 : capture systématique des exceptions non rattrapées
 # dès qu'un service importe quoi que ce soit du package partagé.
