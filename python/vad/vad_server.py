@@ -302,10 +302,26 @@ async def main() -> None:
     _session_lock = asyncio.Lock()
 
     async def handler(ws):
+        # 2026-05-16: send a "ready" handshake BEFORE refusing on the session
+        # lock so passive readiness probes (ServiceSupervisor) see the service
+        # as healthy instead of looping on "WS readiness perdu".
         if _session_lock.locked():
-            await ws.send(json.dumps({"type": "error", "message": "VAD occupé — une autre session est active"}))
+            try:
+                await ws.send(json.dumps({
+                    "type": "ready",
+                    "model": "silero_vad",
+                    "sample_rate": SAMPLE_RATE,
+                    "chunk_samples": CHUNK_SAMPLES,
+                    "busy": True,
+                }))
+                await ws.send(json.dumps({
+                    "type": "error",
+                    "message": "VAD occupé — une autre session est active",
+                }))
+            except Exception:
+                pass
             await ws.close(1013, "VAD busy")
-            logger.warning("Rejected VAD client — session already active")
+            logger.debug("Rejected VAD client — session already active (probe ack'd)")
             return
         async with _session_lock:
             session = VADSession(vad)
