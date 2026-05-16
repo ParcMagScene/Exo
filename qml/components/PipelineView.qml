@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  PipelineView — Pipeline vocal horizontal temps réel
@@ -127,7 +128,7 @@ Rectangle {
                 spacing: Theme.spacing8
 
                 Text {
-                    text: "PIPELINE VOCAL"
+                    text: SettingsLabels.t("pipeline.vocal")
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontTiny
                     font.weight: Font.Bold

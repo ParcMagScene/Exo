@@ -186,7 +186,7 @@ class HomeGraphManager:
             if links:
                 self.merge_links(links)
             return {"ok": True, "data": data}
-        return {"ok": False, "error": "Network scan unreachable"}
+        return {"ok": False, "error": "Scan réseau inaccessible"}
 
     def get_network_topology(self) -> dict:
         """Retourne la topologie réseau depuis la dernière intégration."""
@@ -215,7 +215,7 @@ class HomeGraphManager:
                 dev.last_seen = time.time()
                 self._cache.set_state(id_exo, dev.state)
             return {"ok": True, "data": dev.to_dict()}
-        return {"ok": False, "error": "Connector unreachable"}
+        return {"ok": False, "error": "Connecteur inaccessible"}
 
     def capabilities(self) -> list[str]:
         return [
@@ -513,7 +513,7 @@ async def handle_client(ws, hg: HomeGraphManager) -> None:
                 if dev:
                     await ws.send(json.dumps({"ok": True, "data": dev}))
                 else:
-                    await ws.send(json.dumps({"ok": False, "error": "Device not found"}))
+                    await ws.send(json.dumps({"ok": False, "error": "Appareil introuvable"}))
 
             elif action == "find_device":
                 name = params.get("name", "")
@@ -603,14 +603,14 @@ async def handle_client(ws, hg: HomeGraphManager) -> None:
                 if caps is not None:
                     await ws.send(json.dumps({"ok": True, "data": caps}))
                 else:
-                    await ws.send(json.dumps({"ok": False, "error": "Device not found"}))
+                    await ws.send(json.dumps({"ok": False, "error": "Appareil introuvable"}))
 
             elif action == "get_vendor":
                 vendor = hg.get_vendor(params.get("id_exo", ""))
                 if vendor is not None:
                     await ws.send(json.dumps({"ok": True, "data": {"vendor": vendor}}))
                 else:
-                    await ws.send(json.dumps({"ok": False, "error": "Device not found"}))
+                    await ws.send(json.dumps({"ok": False, "error": "Appareil introuvable"}))
 
             elif action == "list_scenarios":
                 data = hg.list_scenarios()

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
 import "../components"
+import "../core"
 
 // ═══════════════════════════════════════════════════════════════
 //  SecurityPageExpert — Sécurité Spatiale Complète
@@ -18,8 +19,8 @@ Rectangle {
         spacing: 0
 
         ExoPanelHeader {
-            title: "SÉCURITÉ SPATIALE"
-            subtitle: "Risques, Décisions & Causalité"
+            title: SettingsLabels.t("security.title")
+            subtitle: SettingsLabels.t("security.subtitle")
         }
 
         TabBar {
@@ -32,7 +33,7 @@ Rectangle {
             }
 
             TabButton {
-                text: "Vue globale"
+                text: SettingsLabels.t("security.tabOverview")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -43,7 +44,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Risques"
+                text: SettingsLabels.t("security.tabRisks")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -54,7 +55,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Causalité"
+                text: SettingsLabels.t("security.tabCausality")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -65,7 +66,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Decisions"
+                text: SettingsLabels.t("security.tabDecisions")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -92,7 +93,7 @@ Rectangle {
                     spacing: Theme.spacing12
 
                     Text {
-                        text: "Synthèse sécurité"
+                        text: SettingsLabels.t("security.summary")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -237,7 +238,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Catégories de risques"
+                        text: SettingsLabels.t("security.riskCategories")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -329,7 +330,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Graphe causal des risques"
+                        text: SettingsLabels.t("security.causalGraph")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -404,7 +405,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Recommandations & Actions"
+                        text: SettingsLabels.t("security.recommendations")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -456,7 +457,7 @@ Rectangle {
                                             }
 
                                             Text {
-                                                text: "Priorité CRITIQUE"
+                                                text: SettingsLabels.t("security.priorityCritical")
                                                 font.family: Theme.fontMono
                                                 font.pixelSize: Theme.fontMicro
                                                 color: Theme.textSecondary
@@ -466,7 +467,7 @@ Rectangle {
                                         Item { Layout.fillWidth: true }
 
                                         ExoButton {
-                                            text: "Exécuter"
+                                            text: SettingsLabels.t("common.execute")
                                             onClicked: console.log("Execute critical action")
                                         }
                                     }
@@ -506,7 +507,7 @@ Rectangle {
                                         Item { Layout.fillWidth: true }
 
                                         ExoButton {
-                                            text: "Confirmer"
+                                            text: SettingsLabels.t("common.confirm")
                                             onClicked: console.log("Execute mitigation")
                                         }
                                     }

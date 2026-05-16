@@ -148,7 +148,7 @@ async def handle_client(ws, svc: NetworkMapService) -> None:
                 if node:
                     await ws.send(json.dumps({"ok": True, "data": node}, default=str))
                 else:
-                    await ws.send(json.dumps({"ok": False, "error": "Not found"}))
+                    await ws.send(json.dumps({"ok": False, "error": "Introuvable"}))
 
             elif action == "get_topology":
                 topo = svc.get_topology()

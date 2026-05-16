@@ -14,7 +14,10 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "channels": 1,
     },
     "llm": {
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-opus-4.7",
+        "fallback_model": "claude-opus-4.7",
+        "streaming": True,
+        "deprecation_notice": "claude-opus-4.7 only — no fallback",
         "max_tokens": 4096,
         "temperature": 0.7,
         "timeout_s": 10,

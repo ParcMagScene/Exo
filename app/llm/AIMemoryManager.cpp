@@ -657,17 +657,17 @@ void AIMemoryManager::initSemanticServer(const QString &url)
     connect(m_semanticWs, &WebSocketClient::textReceived,
             this, &AIMemoryManager::onSemanticMessage);
     m_semanticWs->open(QUrl(url));
-    hAssistant() << "Connecting to semantic memory server:" << url;
+    hAssistant() << "Connexion au serveur mémoire sémantique :" << url;
 }
 
 void AIMemoryManager::onSemanticConnected()
 {
-    hAssistant() << "Semantic memory server connected";
+    hAssistant() << "Serveur mémoire sémantique connecté";
 }
 
 void AIMemoryManager::onSemanticDisconnected()
 {
-    hWarning(exoAssistant) << "Semantic memory server disconnected — fallback regex";
+    hWarning(exoAssistant) << "Serveur mémoire sémantique déconnecté — repli regex";
     // Reconnection automatique gérée par WebSocketClient
 }
 
@@ -676,7 +676,7 @@ void AIMemoryManager::onSemanticMessage(const QString &msg)
     QJsonParseError jerr{};
     QJsonDocument doc = QJsonDocument::fromJson(msg.toUtf8(), &jerr);
     if (jerr.error != QJsonParseError::NoError) {
-        hWarning(exoAssistant) << "AIMemoryManager: semantic JSON parse error"
+        hWarning(exoAssistant) << "AIMemoryManager : erreur de parsing JSON sémantique"
                                << jerr.errorString() << "offset=" << jerr.offset
                                << "raw=" << msg.left(120);
         return;
@@ -708,9 +708,9 @@ void AIMemoryManager::onSemanticMessage(const QString &msg)
             m_pendingSemanticResults.append(vm);
         }
     } else if (type == "add_result") {
-        hAssistant() << "Semantic server: memory added, id=" << obj["id"].toString();
+        hAssistant() << "Serveur sémantique : souvenir ajouté, id=" << obj["id"].toString();
     } else if (type == "error") {
-        hWarning(exoAssistant) << "Semantic server error:" << obj["message"].toString();
+        hWarning(exoAssistant) << "Erreur serveur sémantique :" << obj["message"].toString();
     }
 }
 

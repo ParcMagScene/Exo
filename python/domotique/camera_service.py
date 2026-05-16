@@ -105,7 +105,7 @@ class CameraService:
         })
         if data:
             return {"ok": True, "url": data.get("picUrl", ""), "serial": serial}
-        return {"ok": False, "error": "Snapshot failed"}
+        return {"ok": False, "error": "Échec de la capture"}
 
     async def get_stream_url(self, camera_id: str) -> dict:
         """Get RTSP/HLS stream URL."""
@@ -116,7 +116,7 @@ class CameraService:
         })
         if data:
             return {"ok": True, "url": data.get("url", ""), "serial": serial}
-        return {"ok": False, "error": "Stream URL failed"}
+        return {"ok": False, "error": "URL du flux invalide"}
 
     async def apply_command(self, device_id: str, command: str,
                              **params) -> dict:

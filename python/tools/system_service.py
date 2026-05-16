@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 
 # Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
@@ -108,7 +108,7 @@ class SystemService:
 
     def processes(self, top_n: int = 10) -> dict:
         if not HAS_PSUTIL:
-            return {"processes": [], "error": "psutil not installed"}
+            return {"processes": [], "error": "psutil non installé"}
 
         procs = []
         for proc in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent"]):
@@ -129,7 +129,7 @@ class SystemService:
 
     def network(self) -> dict:
         if not HAS_PSUTIL:
-            return {"interfaces": [], "error": "psutil not installed"}
+            return {"interfaces": [], "error": "psutil non installé"}
 
         interfaces = []
         addrs = psutil.net_if_addrs()

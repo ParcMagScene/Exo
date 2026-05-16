@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 
 # Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
@@ -443,7 +443,7 @@ async def handle_client(ws, executor: TaskExecutor) -> None:
                     if status:
                         await ws.send(json.dumps({"ok": True, "data": status}))
                     else:
-                        await ws.send(json.dumps({"ok": False, "error": "Execution not found"}))
+                        await ws.send(json.dumps({"ok": False, "error": "Exécution introuvable"}))
 
                 else:
                     await ws.send(json.dumps({

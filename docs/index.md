@@ -1,74 +1,72 @@
-# Nouvelle arborescence unifiée (post-migration)
+﻿# Documentation EXO
 
-# Nouvelle arborescence unifiée (post-migration)
+Bienvenue dans la documentation officielle du projet EXO (Assistant vocal local Qt 6 + Python + Orpheus + Whisper + Claude Opus 4.7).
 
-Toute l’arborescence EXO est désormais unifiée directement sous D:/EXO/ :
+> Mise à jour : 2026-05-16 (post-nettoyage Phase 1+2+3).
 
-```
-D:/EXO/
-    exo/
-    qml/
-    python/
-    services/
-    scripts/
-    config/
-    logs/
-    models/
-    (tous sous D:/EXO/)
-    whispercpp/
-    faiss/
-    cache/
-    .venv/ ou venv/
-    exo_launcher.ps1
-    (tout le reste)
-```
+---
 
-Tous les chemins absolus/relatifs dans le code, les scripts et la documentation doivent pointer vers D:/EXO/<nom>/.
+## Démarrage
 
-Le script de migration migrate_project_to_root.ps1 permet d’automatiser la migration physique.
-# Documentation EXO
+- Lancement standard (silencieux, recommandé) :
+  ```powershell
+  powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "D:\EXO\launch_exo_silent.ps1"
+  ```
+- Stop / restart / status : `. D:\EXO\launch_exo_silent.ps1 ; Stop-EXO | Restart-EXO | Get-EXOStatus`
+- Logs : `D:\EXO\logs\<service>.log` + `<service>.err.log` + `launcher.log`
 
-Bienvenue dans la documentation officielle du projet EXO.
+Voir aussi : [README.md](../README.md) (racine), [PROMPT_MAITRE.md](../PROMPT_MAITRE.md), [CHANGELOG.md](../CHANGELOG.md).
 
-## Table des matières
+---
 
-- [Architecture](architecture/)
-- [Implémentation](implementation/)
-- [Dépannage](troubleshooting/)
-- [Audits](#audits)
-    - [Audio](audits/audio/)
-    - [Backend](audits/backend/)
-    - [GUI](audits/gui/)
-    - [Pipeline](audits/pipeline/) *(vide)*
-    - [Services](audits/services/) *(vide)*
+## Architecture
+
+- [architecture/](architecture/) — Graphes et structure du système
+- [implementation/](implementation/) — Guides d''implémentation
+- [troubleshooting/](troubleshooting/) — Résolution d''incidents
+
+---
+
+## Audits & rapports actifs (2026-05-16)
+
+Tous les audits historiques caducs (avant 2026-05-16) ont été supprimés lors du nettoyage Phase 3.
+
+### Audits structurels
+- [audits/AUDIT_PRE_NETTOYAGE_2026-05-16.md](audits/AUDIT_PRE_NETTOYAGE_2026-05-16.md) — Inventaire complet pré-nettoyage
+- [audits/NETTOYAGE_RAPPORT_2026-05-16.md](audits/NETTOYAGE_RAPPORT_2026-05-16.md) — Exécution Phase 1+2 (4.89 Go libérés)
+
+### Hardening & optimisation
+- [audits/HARDENING_EXO_2026-05-16.md](audits/HARDENING_EXO_2026-05-16.md)
+- [audits/OPTIMISATION_FINALE_2026-05-16.md](audits/OPTIMISATION_FINALE_2026-05-16.md)
+- [audits/ORCHESTRATOR_OPT_2026-05-16.md](audits/ORCHESTRATOR_OPT_2026-05-16.md)
+
+### Francisation
+- [audits/FRANCISATION_BACKEND_2026-05-16.md](audits/FRANCISATION_BACKEND_2026-05-16.md)
+- [audits/FRANCISATION_GUI_2026-05-16.md](audits/FRANCISATION_GUI_2026-05-16.md)
+
+### Performance
+- [PERF_REPORT_J1-J5.md](PERF_REPORT_J1-J5.md)
+- [PERF_REPORT_J2-J3bis-J4bis.md](PERF_REPORT_J2-J3bis-J4bis.md)
+- [PROFILING_LOAD_REPORT.md](PROFILING_LOAD_REPORT.md)
+
+### Scans QML (snapshots 2026-05-01)
+- [audits/qml_dead_scan_2026-05-01.json](audits/qml_dead_scan_2026-05-01.json)
+- [audits/qml_dead_scan_post_cleanup_2026-05-01.json](audits/qml_dead_scan_post_cleanup_2026-05-01.json)
 
 ---
 
 ## Règles de contribution
 
-Voir [CONTRIBUTING_DOCS.md](CONTRIBUTING_DOCS.md)
+Voir [CONTRIBUTING_DOCS.md](CONTRIBUTING_DOCS.md). La structure verrouillée est décrite dans [.structure.lock](.structure.lock).
 
 ---
 
+## Politique LLM (verrouillée)
 
-## Audits
+- Modèle unique : `claude-opus-4.7`
+- Aucun fallback, aucune température, 10 règles strictes (cf [PROMPT_MAITRE.md](../PROMPT_MAITRE.md)).
 
-- [Audio](audits/audio/)
-- [Backend](audits/backend/)
-- [GUI](audits/gui/)
-- [Pipeline](audits/pipeline/) *(vide)*
-- [Services](audits/services/) *(vide)*
+## Politique TTS (verrouillée)
 
-## Implémentation
-
-- [Guides d’implémentation](implementation/)
-
-## Dépannage
-
-- [Guides de résolution et troubleshooting](troubleshooting/)
-
----
-
-## Structure verrouillée
-
-Voir [docs/.structure.lock](.structure.lock)
+- Moteur exclusif : Orpheus 3B FR GGUF Q8 (CUDA, llama.cpp + SNAC) sur port 8767.
+- XTTS / QtTTS / SAPI : interdits, références neutralisées.

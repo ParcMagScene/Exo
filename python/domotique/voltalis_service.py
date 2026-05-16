@@ -181,7 +181,7 @@ class VoltalisService:
         )
         if result is not None:
             return {"ok": True, "state": {"mode": mode, "on": mode != "off"}}
-        return {"ok": False, "error": "Failed to set mode"}
+        return {"ok": False, "error": "Échec de la définition du mode"}
 
     async def apply_command(self, device_id: str, command: str,
                              **params) -> dict:
@@ -237,7 +237,7 @@ async def handle_client(ws, svc: VoltalisService) -> None:
                 if state:
                     await ws.send(json.dumps({"ok": True, "data": state}))
                 else:
-                    await ws.send(json.dumps({"ok": False, "error": "Not found"}))
+                    await ws.send(json.dumps({"ok": False, "error": "Introuvable"}))
 
             elif action == "set_mode":
                 result = await svc.set_mode(
@@ -254,7 +254,7 @@ async def handle_client(ws, svc: VoltalisService) -> None:
                 if result:
                     await ws.send(json.dumps({"ok": True, "data": result}))
                 else:
-                    await ws.send(json.dumps({"ok": False, "error": "Not available"}))
+                    await ws.send(json.dumps({"ok": False, "error": "Non disponible"}))
 
             elif action == "apply_command":
                 result = await svc.apply_command(

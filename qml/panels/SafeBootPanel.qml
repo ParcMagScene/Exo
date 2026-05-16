@@ -210,13 +210,13 @@ Rectangle {
             }
         }
 
-        // ─── Timeline du démarrage ─────────────
+        // ─── Chronologie du démarrage ─────────────
         Column {
             Layout.fillWidth: true
             spacing: Theme.spacing8
 
             Text {
-                text: "⏱  Timeline du démarrage"
+                text: "⏱  Chronologie du démarrage"
                 font.family: Theme.fontMono
                 font.pixelSize: Theme.fontBody
                 font.weight: Font.Bold

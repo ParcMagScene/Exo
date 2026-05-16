@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  FurniturePalette — palette de mobilier catégorisée
@@ -101,7 +102,7 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: "Mobilier"
+                text: SettingsLabels.t("comp.furniture")
                 font.pixelSize: Theme.fontH3
                 font.weight: Font.SemiBold
                 color: Theme.textPrimary

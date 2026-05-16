@@ -77,7 +77,7 @@ void AssistantConnectionBinder::bindSetupConnections(AssistantManager *manager,
                          });
         QObject::connect(voicePipeline, &VoicePipeline::statusChanged,
                          manager, [](const QString &status) {
-                             hVoice() << "Status vocal:" << status;
+                             hVoice() << "État vocal :" << status;
                          });
         QObject::connect(voicePipeline, &VoicePipeline::wakeWordDetected,
                          manager, []() {

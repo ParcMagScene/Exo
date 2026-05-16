@@ -1,1 +1,2 @@
 singleton UIState 1.0 UIState.qml
+singleton SettingsLabels 1.0 SettingsLabels.qml

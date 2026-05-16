@@ -214,15 +214,38 @@ QtObject {
     }
 
     function healthColor(status) {
-        // v4 strings (from HealthCheck)
+        // v6 — vocabulaire normalisé EXO (4 états canoniques) :
+        //   ready    → vert  (service opérationnel)
+        //   starting → jaune (en cours de démarrage / dégradé)
+        //   error    → rouge (en panne / planté / injoignable)
+        //   disabled → gris  (non géré / non configuré / arrêté volontairement)
+        if (status === "ready")    return success
+        if (status === "starting") return warning
+        if (status === "error")    return error
+        if (status === "disabled") return textMuted
+
+        // Compat ascendante — anciennes valeurs HealthCheck/ServiceSupervisor
         if (status === "healthy")  return success
         if (status === "degraded") return warning
-        if (status === "down")     return error
-        // v5 strings (from ServiceSupervisor)
-        if (status === "ready")    return success
-        if (status === "starting" || status === "waiting_ready" || status === "restarting") return warning
-        if (status === "failed" || status === "crashed") return error
+        if (status === "down" || status === "failed" || status === "crashed") return error
+        if (status === "waiting_ready" || status === "restarting") return warning
         return textMuted
+    }
+
+    // Normalise n'importe quelle valeur d'état brute vers les 4 états canoniques.
+    // Utilisé par BottomBar (et autres consommateurs) pour garantir une vue
+    // cohérente quelle que soit la source (HealthCheck / ServiceSupervisor / WS).
+    function normalizeServiceState(raw) {
+        if (!raw) return "disabled"
+        var s = String(raw).toLowerCase()
+        if (s === "ready" || s === "healthy")
+            return "ready"
+        if (s === "starting" || s === "waiting_ready" || s === "restarting" || s === "degraded")
+            return "starting"
+        if (s === "error" || s === "failed" || s === "crashed" || s === "down" || s === "stopped")
+            return "error"
+        // unknown, disabled, "" → service non géré / non configuré
+        return "disabled"
     }
 
     // Lookup de couleur par nom de token

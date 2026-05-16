@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 
 # Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
@@ -611,7 +611,7 @@ async def handle_client(ws, planner: TaskPlanner) -> None:
                         }))
                     else:
                         await ws.send(json.dumps({
-                            "ok": False, "error": "Cannot decompose step",
+                            "ok": False, "error": "Impossible de décomposer l'étape",
                         }))
 
                 elif action == "get_plan":
@@ -619,7 +619,7 @@ async def handle_client(ws, planner: TaskPlanner) -> None:
                     if plan:
                         await ws.send(json.dumps({"ok": True, "data": plan.to_dict()}))
                     else:
-                        await ws.send(json.dumps({"ok": False, "error": "Plan not found"}))
+                        await ws.send(json.dumps({"ok": False, "error": "Plan introuvable"}))
 
                 elif action == "list_plans":
                     plans = planner.list_plans()
@@ -641,7 +641,7 @@ async def handle_client(ws, planner: TaskPlanner) -> None:
                     else:
                         await ws.send(json.dumps({
                             "ok": False,
-                            "error": "Cannot execute step (not found or deps not met)",
+                            "error": "Impossible d'exécuter l'étape (introuvable ou dépendances non satisfaites)",
                         }))
 
                 elif action == "complete_step":
@@ -669,7 +669,7 @@ async def handle_client(ws, planner: TaskPlanner) -> None:
                         await ws.send(json.dumps({
                             "ok": True,
                             "data": {"step": None, "plan_id": plan_id,
-                                     "message": "No more executable steps"},
+                                     "message": "Aucune étape exécutable restante"},
                         }))
 
                 elif action == "next_executable":
@@ -699,7 +699,7 @@ async def handle_client(ws, planner: TaskPlanner) -> None:
                         }))
                     else:
                         await ws.send(json.dumps({
-                            "ok": False, "error": "Cannot replan",
+                            "ok": False, "error": "Impossible de replanifier",
                         }))
 
                 elif action == "cancel_plan":
@@ -713,7 +713,7 @@ async def handle_client(ws, planner: TaskPlanner) -> None:
                     if refined:
                         await ws.send(json.dumps({"ok": True, "data": refined.to_dict()}))
                     else:
-                        await ws.send(json.dumps({"ok": False, "error": "Plan not found"}))
+                        await ws.send(json.dumps({"ok": False, "error": "Plan introuvable"}))
 
                 else:
                     await ws.send(json.dumps({

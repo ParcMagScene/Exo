@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  VoicePipelineView — Visualisation pipeline vocal
@@ -95,7 +96,7 @@ Rectangle {
             Layout.fillWidth: true
 
             Text {
-                text: "VOICE PIPELINE"
+                text: SettingsLabels.t("pipeline.vocal")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontMicro
                 font.weight: Font.Bold
@@ -261,7 +262,7 @@ Rectangle {
                 spacing: Theme.spacing4
 
                 Text {
-                    text: "TRANSITIONS FSM"
+                    text: SettingsLabels.t("pipeline.transitions")
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontTiny
                     font.weight: Font.Bold

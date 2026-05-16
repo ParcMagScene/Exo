@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  ObservabilityDashboard — Services & métriques agrégées
@@ -93,7 +94,7 @@ Rectangle {
             Layout.fillWidth: true
 
             Text {
-                text: "OBSERVABILITY"
+                text: SettingsLabels.t("comp.observability")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontMicro
                 font.weight: Font.Bold
@@ -108,19 +109,19 @@ Rectangle {
                 spacing: Theme.spacing16
 
                 Text {
-                    text: "Avg: " + root.avgLatency.toFixed(0) + "ms"
+                    text: SettingsLabels.t("comp.observabilityAvg") + " " + root.avgLatency.toFixed(0) + " ms"
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.fontTiny
                     color: root.avgLatency > 1000 ? Theme.warning : Theme.textMuted
                 }
                 Text {
-                    text: "Req: " + root.totalRequests
+                    text: SettingsLabels.t("comp.observabilityReq") + " " + root.totalRequests
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.fontTiny
                     color: Theme.textMuted
                 }
                 Text {
-                    text: "Err: " + root.totalErrors
+                    text: SettingsLabels.t("comp.observabilityErr") + " " + root.totalErrors
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.fontTiny
                     color: root.totalErrors > 0 ? Theme.error : Theme.textMuted
@@ -134,7 +135,7 @@ Rectangle {
             spacing: Theme.spacing8
 
             Text {
-                text: "Module:"
+                text: SettingsLabels.t("common.module")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontTiny
                 color: Theme.textSecondary
@@ -394,7 +395,7 @@ Rectangle {
                             Text {
                                 id: refreshLabel
                                 anchors.centerIn: parent
-                                text: "⟳ Refresh"
+                                text: "⟳ Actualiser"
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontTiny
                                 color: Theme.textSecondary

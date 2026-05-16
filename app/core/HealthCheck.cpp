@@ -46,7 +46,7 @@ void HealthCheck::configure(ConfigManager *config)
 void HealthCheck::start(int intervalMs)
 {
     if (m_services.isEmpty()) {
-        qWarning() << "[HealthCheck] No services configured — call configure() first";
+        qWarning() << "[HealthCheck] Aucun service configuré — appelez configure() en premier";
         return;
     }
 
@@ -210,7 +210,7 @@ void HealthCheck::sendPing(const QString &name)
 
 void HealthCheck::onServiceConnected(const QString &name)
 {
-    qDebug() << "[HealthCheck]" << name << "connected";
+    qDebug() << "[HealthCheck]" << name << "connecté";
 
     // VAD est pingé immédiatement après connexion à la demande.
     if (name == QLatin1String("vad")) {
@@ -220,7 +220,7 @@ void HealthCheck::onServiceConnected(const QString &name)
 
 void HealthCheck::onServiceDisconnected(const QString &name)
 {
-    qDebug() << "[HealthCheck]" << name << "disconnected";
+    qDebug() << "[HealthCheck]" << name << "déconnecté";
 
     // Éviter les transitions down parasites pour VAD quand il ferme sa socket healthcheck.
     if (name == QLatin1String("vad")) {

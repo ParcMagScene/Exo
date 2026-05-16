@@ -141,7 +141,7 @@ class TemporalCoherenceEngine:
                             actions.append({
                                 "action": "cancel_past",
                                 "plan_id": pid,
-                                "reason": "Plan in the past",
+                                "reason": "Plan dans le passé",
                             })
         else:
             # No planner — check MetaMemory for temporal data
@@ -152,7 +152,7 @@ class TemporalCoherenceEngine:
                     actions.append({
                         "action": "stale_entry",
                         "entry_id": e.get("id", ""),
-                        "reason": "Future entry is now in the past",
+                        "reason": "Entrée future désormais dans le passé",
                     })
 
         self._stats["enforcements"] += 1

@@ -13,6 +13,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUrl>
+#include <QSet>
 #include <QTimer>
 #include <QRegularExpression>
 
@@ -270,7 +271,24 @@ QString ConfigManager::getClaudeApiKey() const
 
 QString ConfigManager::getClaudeModel() const
 {
-    return getString("Claude", "model", DEFAULT_CLAUDE_MODEL);
+    // LLM LOCK 2026-05-16 : retourne toujours le modele canonique, peu importe
+    // ce que le fichier utilisateur contient. Refus loggue UNE seule fois par
+    // valeur invalide pour eviter le spam.
+    const QString fromConfig = getString("Claude", "model", DEFAULT_CLAUDE_MODEL);
+    if (fromConfig != QLatin1String(DEFAULT_CLAUDE_MODEL)) {
+        static QSet<QString> s_warned;
+        if (!s_warned.contains(fromConfig)) {
+            s_warned.insert(fromConfig);
+            hConfig() << "[LLM] Refus : seul claude-opus-4.7 est autorisé (config:" << fromConfig << ")";
+        }
+    }
+    return QString::fromLatin1(DEFAULT_CLAUDE_MODEL);
+}
+
+QString ConfigManager::getClaudeFallbackModel() const
+{
+    // LLM LOCK 2026-05-16 : pas de fallback, on retourne le canonique.
+    return QString::fromLatin1(DEFAULT_CLAUDE_MODEL);
 }
 
 QString ConfigManager::getWeatherApiKey() const
@@ -340,7 +358,12 @@ void ConfigManager::setClaudeApiKey(const QString &key)
 
 void ConfigManager::setClaudeModel(const QString &model)
 {
-    setUserValue("Claude", "model", model);
+    // LLM LOCK 2026-05-16 : on force la valeur canonique au stockage. Si l'UI
+    // ou un service tente d'ecrire autre chose, on remplace silencieusement.
+    if (model != QLatin1String(DEFAULT_CLAUDE_MODEL)) {
+        hConfig() << "[LLM] Refus : seul claude-opus-4.7 est autorisé (setClaudeModel:" << model << ")";
+    }
+    setUserValue("Claude", "model", QString::fromLatin1(DEFAULT_CLAUDE_MODEL));
 }
 
 void ConfigManager::setWeatherApiKey(const QString &key)
@@ -402,7 +425,13 @@ int ConfigManager::getSTTBeamSize() const
 
 QString ConfigManager::getTTSVoice() const
 {
-    return getString("TTS", "voice", DEFAULT_TTS_VOICE);
+    const QString raw = getString("TTS", "voice", DEFAULT_TTS_VOICE).trimmed().toLower();
+    // Patch anti-XTTS : toute voix XTTS heritee est remappee vers "orpheus".
+    if (raw == QLatin1String("pierre") || raw == QLatin1String("amelie")
+        || raw == QLatin1String("marie")) {
+        return QStringLiteral("orpheus");
+    }
+    return raw.isEmpty() ? QStringLiteral("orpheus") : raw;
 }
 
 QString ConfigManager::getTTSLanguage() const
@@ -437,7 +466,13 @@ void ConfigManager::setTTSServerUrl(const QString &url)
 
 void ConfigManager::setTTSVoice(const QString &voice)
 {
-    setUserValue("TTS", "voice", voice);
+    QString safe = voice.trimmed().toLower();
+    // Patch anti-XTTS : on n'autorise jamais la persistance d'une voix XTTS.
+    if (safe == QLatin1String("pierre") || safe == QLatin1String("amelie")
+        || safe == QLatin1String("marie") || safe.isEmpty()) {
+        safe = QStringLiteral("orpheus");
+    }
+    setUserValue("TTS", "voice", safe);
 }
 
 QString ConfigManager::getTTSEngine() const

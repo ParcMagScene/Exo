@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  ExoTranscriptView — Vue de transcription avec messages
@@ -45,7 +46,7 @@ Rectangle {
                 anchors.rightMargin: Theme.spacing16
 
                 Text {
-                    text: "TRANSCRIPT"
+                    text: SettingsLabels.t("comp.transcript")
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.fontMicro
                     font.bold: true

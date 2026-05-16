@@ -94,14 +94,14 @@ void AssistantSafeBootFacade::setSafeBootDecisionMade(bool value)
 
 void AssistantSafeBootFacade::onServiceReady(const QString &serviceName)
 {
-    hAssistant() << "[SafeBoot] Service ready:" << serviceName;
+    hAssistant() << "[SafeBoot] Service prêt :" << serviceName;
     emit serviceReady(serviceName);
     emit safeBootChanged();
 }
 
 void AssistantSafeBootFacade::onServiceFailed(const QString &serviceName)
 {
-    hWarning(exoAssistant) << "[SafeBoot] Service failed:" << serviceName;
+    hWarning(exoAssistant) << "[SafeBoot] Service en échec :" << serviceName;
     emit serviceFailed(serviceName);
     emit safeBootChanged();
 }

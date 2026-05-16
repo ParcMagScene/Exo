@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
 import "../components"
+import "../core"
 
 Rectangle {
     id: root
@@ -32,10 +33,10 @@ Rectangle {
 
         // ── Header ──
         ExoPanelHeader {
-            title: "Historique"
+            title: SettingsLabels.t("history.title")
             rightContent: [
                 Text {
-                    text: "Effacer"
+                    text: SettingsLabels.t("common.clear")
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.fontMicro
                     color: clearMouseArea.containsMouse ? Theme.error : Theme.textMuted

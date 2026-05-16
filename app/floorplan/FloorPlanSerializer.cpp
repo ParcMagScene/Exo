@@ -85,7 +85,7 @@ bool FloorPlanSerializer::loadFromFile(const QString &path,
     QJsonParseError err;
     const QJsonDocument doc = QJsonDocument::fromJson(data, &err);
     if (err.error != QJsonParseError::NoError) {
-        qWarning("[FloorPlan] JSON parse error: %s", qPrintable(err.errorString()));
+        qWarning("[FloorPlan] Erreur de parsing JSON : %s", qPrintable(err.errorString()));
         return false;
     }
 

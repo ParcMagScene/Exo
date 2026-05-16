@@ -554,7 +554,7 @@ void AssistantManager::onToolCall(const QString &toolUseId,
                                   const QJsonObject &arguments)
 {
     if (!m_toolDispatcher) {
-        hWarning(exoAssistant) << "Tool dispatcher non disponible";
+        hWarning(exoAssistant) << "Dispatcher outils non disponible";
         if (m_claudeApi) {
             QJsonObject result;
             result[QStringLiteral("status")] = QStringLiteral("error");

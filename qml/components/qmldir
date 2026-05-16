@@ -21,3 +21,4 @@ FloorPlanTools 1.0 FloorPlanTools.qml
 FloorPlanProperties 1.0 FloorPlanProperties.qml
 FurniturePalette 1.0 FurniturePalette.qml
 AudioWaveformView 1.0 AudioWaveformView.qml
+SafeButton 1.0 SafeButton.qml

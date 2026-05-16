@@ -36,7 +36,7 @@ QString TraceManager::startTrace(const QString &name)
     root.startMs  = m_clock.elapsed();
     m_activeSpans.insert(root.spanId, root);
 
-    qCInfo(exoTrace) << "Trace started:" << traceId << name;
+    qCInfo(exoTrace) << "Trace démarrée :" << traceId << name;
     emit traceStarted(traceId);
     return traceId;
 }
@@ -70,7 +70,7 @@ void TraceManager::endSpan(const QString &spanId)
         m_completedSpans.removeFirst();
     m_completedSpans.append(completed);
 
-    qCDebug(exoTrace) << "Span ended:" << completed.name
+    qCDebug(exoTrace) << "Span terminé :" << completed.name
                       << completed.durationMs() << "ms";
 
     lock.unlock();

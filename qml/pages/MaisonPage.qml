@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  MaisonPage — Vue Maison Connectée (Domotique v2)
@@ -85,7 +86,7 @@ Item {
                     Text {
                         id: labelAll
                         anchors.centerIn: parent
-                        text: "Tout"
+                        text: SettingsLabels.t("common.all")
                         font.pixelSize: Theme.fontSM
                         color: root.selectedRoom === "" ? "#FFF" : Theme.textSecondary
                     }

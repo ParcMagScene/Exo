@@ -416,7 +416,7 @@ QVariantMap FloorPlanModel::findGuides(QPointF p, QSizeF itemSize,
 void FloorPlanModel::save(const QString &path)
 {
     if (!FloorPlanSerializer::saveToFile(path, m_planName, m_items))
-        qWarning("[FloorPlan] Save failed: %s", qPrintable(path));
+        qWarning("[FloorPlan] Échec de la sauvegarde : %s", qPrintable(path));
 }
 
 void FloorPlanModel::load(const QString &path)
@@ -424,7 +424,7 @@ void FloorPlanModel::load(const QString &path)
     QString name;
     QList<FloorPlanItem> items;
     if (!FloorPlanSerializer::loadFromFile(path, name, items)) {
-        qWarning("[FloorPlan] Load failed: %s", qPrintable(path));
+        qWarning("[FloorPlan] Échec du chargement : %s", qPrintable(path));
         return;
     }
 

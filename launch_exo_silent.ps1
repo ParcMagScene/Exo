@@ -370,6 +370,39 @@ function Start-EXO {
     if (-not (Test-Path $pythonStt))  { Write-Launcher "venv_stt_tts manquant : $pythonStt" -Level 'FAIL' }
     if (-not (Test-Path $pythonVenv)) { Write-Launcher "venv manquant : $pythonVenv"        -Level 'FAIL' }
 
+    # --- Préflight Hardening 2026 (vérifications critiques) -----------------
+    Write-Launcher "--- Preflight Hardening 2026 ---" -Level 'INFO'
+    $preflightErrors = 0
+    $criticalPaths = @(
+        @{ Name='Whisper bin';     Path=(Join-Path $script:SsdRoot 'whispercpp/build_vk/bin/Release/whisper-cli.exe') },
+        @{ Name='Whisper model';   Path=(Join-Path $script:SsdRoot 'models/whisper/ggml-small.bin') },
+        @{ Name='Orpheus GGUF';    Path=(Join-Path $script:SsdRoot 'models/orpheus_fr_gguf') },
+        @{ Name='Orpheus venv';    Path=$pythonOrpheus },
+        @{ Name='Venv principal';  Path=$pythonVenv },
+        @{ Name='Venv STT/TTS';    Path=$pythonStt },
+        @{ Name='RaspberryAssistant.exe'; Path=(Join-Path $script:ProjectDir 'build/Release/RaspberryAssistant.exe') }
+    )
+    foreach ($item in $criticalPaths) {
+        if (-not (Test-Path $item.Path)) {
+            Write-Launcher ("Preflight FAIL : {0} introuvable -> {1}" -f $item.Name, $item.Path) -Level 'FAIL'
+            $preflightErrors++
+        } else {
+            Write-Launcher ("Preflight OK   : {0}" -f $item.Name) -Level 'OK'
+        }
+    }
+    # Vérification que les ports cibles sont libres (sauf 8765 deja teste).
+    $portsToCheck = @(8766, 8767, 8770, 8771, 8772, 8773, 8774, 8775, 8776, 8777)
+    foreach ($p in $portsToCheck) {
+        if (Test-PortListening -Port $p) {
+            Write-Launcher ("Preflight WARN : port {0} deja occupe (collision potentielle)" -f $p) -Level 'WARN'
+        }
+    }
+    if ($preflightErrors -gt 0) {
+        Write-Launcher "Preflight: $preflightErrors erreur(s) critique(s) - poursuite tentee en mode degrade" -Level 'WARN'
+    } else {
+        Write-Launcher "Preflight: tous les controles critiques passes" -Level 'OK'
+    }
+
     # --- Reset du PID store -------------------------------------------------
     Clear-EXOPidStore
 
@@ -455,6 +488,11 @@ function Start-EXO {
         -Script 'python/news/news_server.py'           -Port 8774 -HealthTimeoutSeconds 0
     Start-EXOService -Name 'Knowledge' -Python $pythonVenv `
         -Script 'python/knowledge/knowledge_server.py' -Port 8775 -HealthTimeoutSeconds 0
+    # STABILISATION v10 2026-05-16 : Voltalis ajoute (domotique radiateurs eco-pilotes).
+    # Le GUI (BottomBar.qml) le declare comme tool ; sans ce service il loggait
+    # "Socket outil en attente (service non pret) : voltalis".
+    Start-EXOService -Name 'Voltalis'  -Python $pythonVenv `
+        -Script 'python/domotique/voltalis_service.py' -Port 8788 -HealthTimeoutSeconds 0
 
     # =======================================================================
     #  GUI EXO (RaspberryAssistant.exe) — Qt affiche sa propre fenetre.

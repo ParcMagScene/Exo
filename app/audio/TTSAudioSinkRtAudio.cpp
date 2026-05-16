@@ -4,8 +4,30 @@
 #include "TTSManager.h"   // pour PCMRingBuffer
 #include <QDebug>
 #include <cstring>
+#include <cstdlib>
+#include <string>
 
-TTSAudioSinkRtAudio::TTSAudioSinkRtAudio() = default;
+TTSAudioSinkRtAudio::TTSAudioSinkRtAudio()
+{
+    // Hardening 2026-05-16 : init opt-in du watchdog audio.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4996) // std::getenv jugé "unsafe" par MSVC, lecture seule ici.
+#endif
+    const char *env = std::getenv("EXO_AUDIO_WATCHDOG_MS");
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+    if (env) {
+        try {
+            const int thresh = std::stoi(env);
+            if (thresh > 0) {
+                m_watchdog = std::make_unique<exo::hardening::LatencyWatchdog>(thresh);
+                qDebug() << "TTSAudioSinkRtAudio : LatencyWatchdog activé seuil" << thresh << "ms";
+            }
+        } catch (...) { /* env invalide : watchdog désactivé */ }
+    }
+}
 
 TTSAudioSinkRtAudio::~TTSAudioSinkRtAudio()
 {
@@ -73,8 +95,12 @@ bool TTSAudioSinkRtAudio::open(int sampleRate, int channels, PCMRingBuffer *ring
     params.firstChannel = 0;
 
     RtAudio::StreamOptions opts;
-    opts.flags = RTAUDIO_SCHEDULE_REALTIME;
-    opts.priority = 1;
+    // AUDIT AUDIO 2026-05-04 : SCHEDULE_REALTIME + priorite max plage RtAudio
+    // (Windows : SetThreadPriority THREAD_PRIORITY_TIME_CRITICAL = 15). Reduit
+    // drastiquement le risque de preemption du callback WASAPI -> elimine les
+    // jitter spikes >100 ms causes par un wakeup OS tardif.
+    opts.flags = RTAUDIO_SCHEDULE_REALTIME | RTAUDIO_MINIMIZE_LATENCY;
+    opts.priority = 15;
 
     RtAudioErrorType err = m_rt->openStream(
         &params, nullptr,
@@ -85,11 +111,11 @@ bool TTSAudioSinkRtAudio::open(int sampleRate, int channels, PCMRingBuffer *ring
         this,
         &opts);
     if (err != RTAUDIO_NO_ERROR) {
-        qWarning() << "TTSAudioSinkRtAudio: openStream FAIL" << (int)err;
+        qWarning() << "TTSAudioSinkRtAudio : échec ouverture stream" << (int)err;
         return false;
     }
 
-    qDebug() << "TTSAudioSinkRtAudio: stream OUVERT (pas encore demarre), bufferFrames negociees:"
+    qDebug() << "TTSAudioSinkRtAudio : stream ouvert (pas encore démarré), bufferFrames négociées :"
              << m_bufferFrames;
     return true;
 }
@@ -97,7 +123,7 @@ bool TTSAudioSinkRtAudio::open(int sampleRate, int channels, PCMRingBuffer *ring
 bool TTSAudioSinkRtAudio::start()
 {
     if (!m_rt || !m_rt->isStreamOpen()) {
-        qWarning() << "TTSAudioSinkRtAudio::start() sans openStream prealable";
+        qWarning() << "TTSAudioSinkRtAudio::start() sans openStream préalable";
         return false;
     }
     if (m_rt->isStreamRunning()) {
@@ -106,11 +132,11 @@ bool TTSAudioSinkRtAudio::start()
     }
     RtAudioErrorType err = m_rt->startStream();
     if (err != RTAUDIO_NO_ERROR) {
-        qWarning() << "TTSAudioSinkRtAudio: startStream FAIL" << (int)err;
+        qWarning() << "TTSAudioSinkRtAudio : échec démarrage stream" << (int)err;
         return false;
     }
     m_running = true;
-    qDebug() << "TTSAudioSinkRtAudio: stream DEMARRE";
+    qDebug() << "TTSAudioSinkRtAudio : stream démarré";
     return true;
 }
 
@@ -146,6 +172,10 @@ int TTSAudioSinkRtAudio::rtCallback(void *outputBuffer, void * /*inputBuffer*/,
     auto *self = static_cast<TTSAudioSinkRtAudio *>(userData);
     if (!self || !outputBuffer) return 0;
 
+    // Hardening 2026-05-16 : watchdog opt-in (log uniquement, no-op si désactivé).
+    if (self->m_watchdog) self->m_watchdog->tick();
+    (void)status;
+
     const int frameBytes = self->m_channels * static_cast<int>(sizeof(int16_t));
     const int wantBytes  = static_cast<int>(nFrames) * frameBytes;
     char *out = static_cast<char *>(outputBuffer);
@@ -157,10 +187,34 @@ int TTSAudioSinkRtAudio::rtCallback(void *outputBuffer, void * /*inputBuffer*/,
 
     const int got = self->m_ring->read(out, wantBytes);
     if (got < wantBytes) {
-        // Underflow : silence-fill le reste. Ne jamais retourner moins de
-        // donnees que ce que WASAPI demande -> sinon click immediat.
-        std::memset(out + got, 0, wantBytes - got);
-        if (got < wantBytes && self->m_running.load())
+        // AUDIT AUDIO 2026-05-04 : anti-click fin de phrase. Au lieu d'un
+        // memset(0) brutal (cause un step DC -> craquement audible), on
+        // applique un fade lineaire du dernier sample disponible vers 0 sur
+        // les premiers ~5 ms de la zone manquante, puis silence pur.
+        const int missing = wantBytes - got;
+        char *fillStart = out + got;
+        const int chBytes = self->m_channels * static_cast<int>(sizeof(int16_t));
+        // Fade window : min(missing, 5 ms) frames.
+        int fadeFrames = (missing / std::max(1, chBytes));
+        const int fadeMaxFrames = (self->m_sampleRate * 5) / 1000;
+        if (fadeFrames > fadeMaxFrames) fadeFrames = fadeMaxFrames;
+        if (got >= chBytes && fadeFrames > 0) {
+            const int16_t *lastFrame = reinterpret_cast<const int16_t *>(out + got - chBytes);
+            int16_t *dst = reinterpret_cast<int16_t *>(fillStart);
+            for (int f = 0; f < fadeFrames; ++f) {
+                const float gain = 1.0f - (static_cast<float>(f + 1) / static_cast<float>(fadeFrames + 1));
+                for (int c = 0; c < self->m_channels; ++c) {
+                    const int v = static_cast<int>(static_cast<float>(lastFrame[c]) * gain);
+                    dst[f * self->m_channels + c] =
+                        static_cast<int16_t>(v < -32768 ? -32768 : (v > 32767 ? 32767 : v));
+                }
+            }
+            const int fadedBytes = fadeFrames * chBytes;
+            std::memset(fillStart + fadedBytes, 0, missing - fadedBytes);
+        } else {
+            std::memset(fillStart, 0, missing);
+        }
+        if (self->m_running.load())
             self->m_underflowCount.fetch_add(1, std::memory_order_relaxed);
     }
     self->m_framesWritten.fetch_add(nFrames, std::memory_order_relaxed);

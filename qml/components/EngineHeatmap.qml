@@ -1,7 +1,8 @@
-﻿import QtQuick
+import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  EngineHeatmap â€” Grille 8Ã—8 des moteurs EXO
@@ -98,7 +99,7 @@ Rectangle {
             spacing: Theme.spacing12
 
             Text {
-                text: "ENGINE HEATMAP"
+                text: SettingsLabels.t("comp.engineHeatmap")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontMicro
                 font.weight: Font.Bold
@@ -199,7 +200,7 @@ Rectangle {
 
                         Text {
                             Layout.alignment: Qt.AlignHCenter
-                            text: (edata.calls || 0) + " calls"
+                            text: (edata.calls || 0) + " appels"
                             font.family: Theme.fontMono
                             font.pixelSize: Theme.fontTiny
                             color: Theme.textMuted
@@ -213,11 +214,11 @@ Rectangle {
                         visible: cellMouse.containsMouse
                         delay: 400
                         text: (root.engineLabels[engineId] || engineId) +
-                              "\nLatence: " + (edata.last_ms || 0).toFixed(0) + " ms" +
-                              "\nMoy: " + (edata.avg_ms || 0).toFixed(0) + " ms" +
-                              "\nAppels: " + (edata.calls || 0) +
-                              "\nErreurs: " + (edata.errors || 0) +
-                              "\nÃ‰tat: " + (edata.state || "idle")
+                              "\nLatence : " + (edata.last_ms || 0).toFixed(0) + " ms" +
+                              "\nMoyenne : " + (edata.avg_ms || 0).toFixed(0) + " ms" +
+                              "\nAppels : " + (edata.calls || 0) +
+                              "\nErreurs : " + (edata.errors || 0) +
+                              "\nÉtat : " + (edata.state || "idle")
 
                         background: Rectangle {
                             color: Theme.bgElevated
@@ -247,19 +248,19 @@ Rectangle {
             spacing: Theme.spacing16
 
             Text {
-                text: "â–  Rapide"
+                text: SettingsLabels.t("comp.engineFast")
                 font.family: Theme.fontMono
                 font.pixelSize: Theme.fontTiny
                 color: Theme.success
             }
             Text {
-                text: "â–  ModÃ©rÃ©"
+                text: SettingsLabels.t("comp.engineModerate")
                 font.family: Theme.fontMono
                 font.pixelSize: Theme.fontTiny
                 color: Theme.warning
             }
             Text {
-                text: "â–  Lent"
+                text: SettingsLabels.t("comp.engineSlow")
                 font.family: Theme.fontMono
                 font.pixelSize: Theme.fontTiny
                 color: Theme.error

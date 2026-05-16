@@ -1,19 +1,11 @@
-# Migration automatique de l’arborescence EXO
+# EXO — Assistant vocal local
 
-Depuis la migration 2026-05, toute l’arborescence EXO est unifiée directement sous D:/EXO/.
+Pipeline temps réel local-first, LLM externe `claude-opus-4.7` verrouillé.
 
-1. Exécutez le script PowerShell suivant depuis D:/EXO/ :
-
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "migrate_project_to_root.ps1"
-
-2. Vérifiez le journal de migration dans D:/EXO/logs/migration.log
-3. Supprimez l’ancien dossier project/ uniquement après validation complète (aucun code ne doit référencer project/).
-
-Ce script déplace tous les dossiers/fichiers de project/ à la racine D:/EXO/, crée les dossiers cibles, vérifie la copie et journalise chaque opération.
-...existing code...
+```text
 Micro → RtAudio WASAPI → DSP (noisereduce) → VAD (Silero :8768)
   → WakeWord (OpenWakeWord :8770) → STT (Whisper.cpp small Vulkan :8766)
-  → NLU (:8772) → Claude API (SSE + Function Calling)
+  → NLU (:8772) → Claude Opus 4.7 (SSE + Function Calling)
   → TTS (Orpheus 3B FR GGUF Q8 CUDA :8767) → TTSManager (C++ DSP) → Speaker
 ```
 
@@ -22,7 +14,7 @@ Micro → RtAudio WASAPI → DSP (noisereduce) → VAD (Silero :8768)
 | VAD | Silero neural (hybrid) | < 50 ms |
 | WakeWord | OpenWakeWord | < 100 ms |
 | STT | Whisper.cpp small, Vulkan, beam=1, int8 | < 2 s |
-| LLM | Claude Sonnet SSE | first token < 500 ms |
+| LLM | Claude Opus 4.7 (SSE) | first token < 500 ms |
 | TTS | Orpheus 3B FR GGUF Q8, CUDA, streaming | first chunk < 1.5 s |
 | DSP | EQ → Compressor → Normalizer → Fade | < 5 ms |
 
@@ -276,10 +268,16 @@ Stockés sur `D:\EXO\` :
 
 ## Démarrage
 
-### Tout-en-un (recommandé)
+### Tout-en-un (recommandé, silencieux)
 
 ```powershell
-.\launch_exo.ps1
+powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "D:\EXO\launch_exo_silent.ps1"
+```
+
+Stop / restart / status (dot-source) :
+
+```powershell
+. D:\EXO\launch_exo_silent.ps1 ; Stop-EXO   # ou Restart-EXO / Get-EXOStatus
 ```
 
 Ou via VS Code : `Ctrl+Shift+P` → `Tasks: Run Task` → `launch_all`.
@@ -336,7 +334,8 @@ Fichier `config/assistant.conf` — format INI, priorité : **Variables d'enviro
 ```ini
 [Claude]
 api_key=${CLAUDE_API_KEY}
-model=claude-sonnet-4-20250514
+model=claude-opus-4.7
+; VERROU LLM 2026-05-16 : aucun fallback autorise (claude-opus-4.7 strict, wire-ID claude-opus-4-7)
 
 [STT]
 server_url=ws://localhost:8766

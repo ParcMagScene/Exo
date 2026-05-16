@@ -56,7 +56,7 @@ void AssistantToolDispatcher::requestNetworkScan(bool fast)
 
     auto *ws = m_toolSockets.value(QStringLiteral("network"));
     if (!ws || !ws->isValid()) {
-        hWarning(exoAssistant) << "Network socket non disponible";
+        hWarning(exoAssistant) << "Socket réseau non disponible";
         QJsonObject err;
         err[QStringLiteral("status")] = QStringLiteral("error");
         err[QStringLiteral("message")] = QStringLiteral("Service reseau non disponible");
@@ -75,14 +75,14 @@ void AssistantToolDispatcher::requestNetworkScan(bool fast)
         QString::fromUtf8(QJsonDocument(request).toJson(QJsonDocument::Compact)),
         "network/scan");
 
-    hAssistant() << "GUI network scan:" << (fast ? "fast" : "full");
+    hAssistant() << "Scan réseau GUI :" << (fast ? "fast" : "full");
 
     int timeoutMs = fast ? NETWORK_SCAN_FAST_MS : NETWORK_SCAN_FULL_MS;
     QTimer::singleShot(timeoutMs, this, [this, guiId]() {
         if (m_guiToolCalls.remove(guiId)) {
             if (m_pendingToolCalls.value(QStringLiteral("network")) == guiId)
                 m_pendingToolCalls.remove(QStringLiteral("network"));
-            hWarning(exoAssistant) << "GUI network scan timeout";
+            hWarning(exoAssistant) << "Timeout scan réseau GUI";
             QJsonObject err;
             err[QStringLiteral("status")] = QStringLiteral("error");
             err[QStringLiteral("message")] = QStringLiteral("Timeout scan reseau");
@@ -115,7 +115,7 @@ void AssistantToolDispatcher::requestHomeGraph()
         QString::fromUtf8(QJsonDocument(request).toJson(QJsonDocument::Compact)),
         "homegraph/gui_state");
 
-    hAssistant() << "GUI HomeGraph state requested";
+    hAssistant() << "État HomeGraph demandé par GUI";
 
     QTimer::singleShot(HOMEGRAPH_TIMEOUT_MS, this, [this, guiId]() {
         if (m_guiToolCalls.remove(guiId)) {
@@ -161,7 +161,7 @@ void AssistantToolDispatcher::requestDeviceCommand(const QString &deviceId,
         QString::fromUtf8(QJsonDocument(request).toJson(QJsonDocument::Compact)),
         "homegraph/apply_command");
 
-    hAssistant() << "GUI device command:" << deviceId << command;
+    hAssistant() << "Commande appareil GUI :" << deviceId << command;
 
     QTimer::singleShot(DEVICE_COMMAND_TIMEOUT_MS, this, [this, guiId]() {
         if (m_guiToolCalls.remove(guiId)) {
@@ -202,7 +202,7 @@ void AssistantToolDispatcher::requestRunScenario(const QString &name)
         QString::fromUtf8(QJsonDocument(request).toJson(QJsonDocument::Compact)),
         "homegraph/run_scenario");
 
-    hAssistant() << "GUI run scenario:" << name;
+    hAssistant() << "Exécution scénario GUI :" << name;
 
     QTimer::singleShot(SCENARIO_TIMEOUT_MS, this, [this, guiId]() {
         if (m_guiToolCalls.remove(guiId)) {
@@ -224,7 +224,7 @@ void AssistantToolDispatcher::handleToolCall(const QString &toolUseId,
         return;
     }
 
-    hAssistant() << "Tool call recu:" << toolName << "- id:" << toolUseId;
+    hAssistant() << "Appel d'outil reçu :" << toolName << "- id:" << toolUseId;
     PIPELINE_EVENT(PipelineModule::Claude, EventType::ToolCallDispatched,
                    QJsonObject{{"tool", toolName}, {"tool_use_id", toolUseId}});
 
@@ -437,7 +437,7 @@ void AssistantToolDispatcher::handleToolCall(const QString &toolUseId,
         return;
     }
 
-    hWarning(exoAssistant) << "Tool inconnu:" << toolName;
+    hWarning(exoAssistant) << "Outil inconnu :" << toolName;
     result[QStringLiteral("status")] = QStringLiteral("error");
     result[QStringLiteral("message")] =
         QStringLiteral("Outil '%1' non reconnu").arg(toolName);
@@ -447,7 +447,7 @@ void AssistantToolDispatcher::handleToolCall(const QString &toolUseId,
 void AssistantToolDispatcher::initToolSockets()
 {
     if (!m_configManager) {
-        hWarning(exoAssistant) << "Tool dispatcher non configure";
+        hWarning(exoAssistant) << "Dispatcher outils non configuré";
         return;
     }
 
@@ -492,20 +492,44 @@ void AssistantToolDispatcher::initToolSockets()
         // deconnecte". On ne signale donc une déconnexion qu'après avoir été
         // au moins une fois connecté.
         auto wasConnected = QSharedPointer<bool>::create(false);
+        // STABILISATION v10 2026-05-16 : compteur de tentatives pour services
+        // non implementes (calendar/files/homegraph/camera/domotic/samsung/echo/network).
+        // Sans plafond, la lambda disconnected re-arme un singleShot 3s indefiniment
+        // -> 8 services x toutes les 3s = ~24 lignes DEBUG/min dans GUI.log.
+        // Apres MAX_TOOL_RETRIES tentatives, on log un seul WARN "indisponible"
+        // et on arrete les reconnexions.
+        auto retryCount = QSharedPointer<int>::create(0);
+        constexpr int MAX_TOOL_RETRIES = 5;  // 5 * 3s = 15s de tolerance au lazy boot
 
-        connect(ws, &QWebSocket::connected, this, [serviceName, wasConnected]() {
+        connect(ws, &QWebSocket::connected, this, [serviceName, wasConnected, retryCount]() {
             *wasConnected = true;
-            hAssistant() << "Tool socket connecte:" << serviceName;
+            *retryCount = 0;  // reset compteur si reconnexion reussie
+            hAssistant() << "Socket outil connecté :" << serviceName;
         });
 
-        connect(ws, &QWebSocket::disconnected, this, [this, serviceName, url, wasConnected]() {
+        connect(ws, &QWebSocket::disconnected, this,
+                [this, serviceName, url, wasConnected, retryCount]() {
             if (*wasConnected) {
-                hAssistant() << "Tool socket deconnecte:" << serviceName;
+                hAssistant() << "Socket outil déconnecté :" << serviceName;
                 *wasConnected = false;
+                *retryCount = 0;  // service etait OK, on lui redonne ses chances
             } else {
-                // Service pas encore prêt (lazy boot). Retry silencieux.
-                hDebug(exoAssistant) << "Tool socket en attente (service non prêt):" << serviceName;
+                // Service pas encore pret (lazy boot). Retry silencieux.
+                if (*retryCount < MAX_TOOL_RETRIES) {
+                    hDebug(exoAssistant) << "Socket outil en attente (service non prêt) :"
+                                         << serviceName << "(tentative" << (*retryCount + 1)
+                                         << "/" << MAX_TOOL_RETRIES << ")";
+                } else if (*retryCount == MAX_TOOL_RETRIES) {
+                    hWarning(exoAssistant) << "Service outil indisponible apres"
+                                           << MAX_TOOL_RETRIES
+                                           << "tentatives -- abandon :" << serviceName;
+                    (*retryCount)++;
+                    return;  // pas de re-arming
+                } else {
+                    return;  // deja abandonne, silencieux total
+                }
             }
+            (*retryCount)++;
             QTimer::singleShot(3000, this, [this, serviceName, url]() {
                 if (auto *sock = m_toolSockets.value(serviceName)) {
                     sock->open(QUrl(url));
@@ -520,7 +544,7 @@ void AssistantToolDispatcher::initToolSockets()
 
         m_toolSockets.insert(svc.name, ws);
         ws->open(QUrl(url));
-        hAssistant() << "Tool socket" << svc.name << "->" << url;
+        hAssistant() << "Socket outil" << svc.name << "->" << url;
     }
 }
 
@@ -553,7 +577,7 @@ void AssistantToolDispatcher::dispatchToolToService(const QString &service,
     QJsonDocument doc(request);
     ws->sendTextMessage(QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
 
-    hAssistant() << "Tool dispatch:" << action << "->" << service
+    hAssistant() << "Dispatch outil :" << action << "->" << service
                  << "(tool_use_id:" << toolUseId << ")";
 
     QTimer::singleShot(TOOL_CALL_TIMEOUT_MS, this, [this, service, toolUseId]() {
@@ -589,7 +613,7 @@ void AssistantToolDispatcher::onToolServiceMessage(const QString &service,
 
     QString toolUseId = m_pendingToolCalls.value(service);
     if (toolUseId.isEmpty()) {
-        hAssistant() << "Message tool recu sans requete en attente:" << service;
+        hAssistant() << "Message outil reçu sans requête en attente :" << service;
         return;
     }
 

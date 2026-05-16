@@ -153,7 +153,7 @@ void ContextCache::startBackgroundRefresh()
     connect(m_refreshTimer, &QTimer::timeout, this, &ContextCache::onRefreshTimer);
     m_refreshTimer->start();
 
-    hAssistant() << "ContextCache background refresh started — interval:"
+    hAssistant() << "Rafraîchissement ContextCache en arrière-plan démarré — intervalle :"
                  << minInterval << "ms," << m_refreshRules.size() << "rules";
 }
 

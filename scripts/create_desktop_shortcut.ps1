@@ -6,10 +6,10 @@ $projectDir = (Resolve-Path "$PSScriptRoot\..").Path
 $desktop    = [Environment]::GetFolderPath('Desktop')
 $lnkPath    = Join-Path $desktop "EXO Assistant.lnk"
 
-$launcher   = Join-Path $projectDir "launch_exo.ps1"
+$launcher   = Join-Path $projectDir "launch_exo_silent.ps1"
 
 if (-not (Test-Path $launcher)) {
-    Write-Host "ERREUR: launch_exo.ps1 introuvable : $launcher" -ForegroundColor Red
+    Write-Host "ERREUR: launch_exo_silent.ps1 introuvable : $launcher" -ForegroundColor Red
     exit 1
 }
 
@@ -19,9 +19,9 @@ $shortcut = $shell.CreateShortcut($lnkPath)
 $icoPath = Join-Path $projectDir "resources\icons\exo.ico"
 
 $shortcut.TargetPath       = "powershell.exe"
-$shortcut.Arguments        = "-ExecutionPolicy Bypass -File `"$launcher`""
+$shortcut.Arguments        = "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$launcher`""
 $shortcut.WorkingDirectory = $projectDir
-$shortcut.Description      = "Lance EXO Assistant v30.3"
+$shortcut.Description      = "Lance EXO Assistant (silencieux)"
 if (Test-Path $icoPath) {
     $shortcut.IconLocation = "$icoPath,0"
 }

@@ -15,6 +15,21 @@
 #include <QDateTime>
 #include <QThread>
 #include <QSet>
+#include <QFile>
+
+namespace {
+// LLM LOCK 2026-05-16 — mapping interne uniquement pour le payload HTTP sortant.
+// L'identifiant canonique EXO reste "claude-opus-4.7" (config, logs, affichage,
+// validation). L'API Anthropic publie ce meme modele sous l'id "claude-opus-4-7"
+// (tirets, pas de point). On ne traduit qu'au moment d'ecrire le champ JSON
+// "model" envoye a https://api.anthropic.com/v1/messages.
+inline QString anthropicWireModelId(const QString &canonical)
+{
+    if (canonical == QLatin1String("claude-opus-4.7"))
+        return QStringLiteral("claude-opus-4-7");
+    return canonical; // jamais atteint grace au lock, mais filet de securite
+}
+} // namespace
 
 // ═══════════════════════════════════════════════════════
 //  Construction / Destruction
@@ -25,12 +40,17 @@ ClaudeAPI::ClaudeAPI(QObject *parent)
     , m_networkManager(new QNetworkAccessManager(this))
     , m_timeoutTimer(new QTimer(this))
     , m_retryTimer(new QTimer(this))
-    , m_temperature(DEFAULT_TEMP)
     , m_maxTokens(DEFAULT_MAX_TOKENS)
     , m_topP(-1.0)
     , m_topK(-1)
     , m_timeoutMs(DEFAULT_TIMEOUT)
 {
+    // LLM LOCK 2026-05-16 : modele canonique force des la construction. Aucun
+    // appel a setModel(...) ulterieur ne pourra le remplacer par autre chose.
+    m_model = QStringLiteral("claude-opus-4.7");
+    m_fallbackModel.clear();
+    hClaude() << "[LLM] Modèle actif :" << m_model;
+
     m_timeoutTimer->setSingleShot(true);
     m_retryTimer->setSingleShot(true);
 
@@ -71,19 +91,40 @@ void ClaudeAPI::setApiKey(const QString &apiKey)
 
 void ClaudeAPI::setModel(const QString &model)
 {
-    if (m_model != model) {
-        m_model = model;
+    // LLM LOCK 2026-05-16 : seul claude-opus-4.7 est autorise. Toute autre
+    // valeur est REFUSEE (pas de substitution silencieuse cote setter -- on
+    // emit une erreur explicite via setError pour que l'appelant sache).
+    static const QString kCanonicalModel = QStringLiteral("claude-opus-4.7");
+    if (model != kCanonicalModel) {
+        const QString msg = QStringLiteral(
+            "Modèle LLM invalide : claude-opus-4.7 attendu (reçu: %1)").arg(model);
+        hClaude() << "[LLM] Refus :" << msg;
+        setError(msg);
+        // On force quand meme l'etat interne au modele canonique pour que les
+        // prochaines requetes partent avec la bonne valeur.
+    }
+    if (m_model != kCanonicalModel) {
+        m_model = kCanonicalModel;
         m_skeletonDirty = true;
-        hClaude() << "Modèle:" << model;
+        hClaude() << "[LLM] Modèle actif :" << m_model;
         emit modelChanged();
     }
 }
 
-void ClaudeAPI::setTemperature(double temp)
+void ClaudeAPI::setFallbackModel(const QString &fallbackModel)
 {
-    m_temperature = qBound(0.0, temp, 1.0);
-    m_skeletonDirty = true;
+    // LLM LOCK 2026-05-16 : aucun fallback autorise. On ignore silencieusement
+    // toute valeur differente du modele canonique et on loggue le refus.
+    static const QString kCanonicalModel = QStringLiteral("claude-opus-4.7");
+    if (!fallbackModel.isEmpty() && fallbackModel != kCanonicalModel) {
+        hClaude() << "[LLM] Refus : seul claude-opus-4.7 est autorisé (fallback ignoré:"
+                  << fallbackModel << ")";
+    }
+    m_fallbackModel.clear(); // desactive tryFallbackModel
 }
+
+// LLM LOCK 2026-05-16 : setTemperature() supprimé — claude-opus-4.7 rejette
+// le champ `temperature` (HTTP 400 invalid_request_error). Skeleton omet déjà.
 
 void ClaudeAPI::setMaxTokens(int tokens)
 {
@@ -398,6 +439,14 @@ void ClaudeAPI::startRequest(const QByteArray &payload, bool stream)
               << (stream ? "streaming" : "sync")
               << "— modèle:" << m_model
               << "— payload:" << (payload.size() / 1024) << "KB";
+
+    // DEBUG LLM LOCK 2026-05-16 : dump systematique du payload sortant pour
+    // pouvoir le rejouer via curl en cas de refus serveur (HTTP 4xx).
+    QFile dumpReq(QStringLiteral("D:/EXO/logs/claude_last_request.json"));
+    if (dumpReq.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        dumpReq.write(payload);
+        dumpReq.close();
+    }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -687,7 +736,7 @@ void ClaudeAPI::handleContentBlockStart(const QJsonObject &data)
     if (blockType == QLatin1String("tool_use")) {
         block.toolUseId = blockObj[QStringLiteral("id")].toString();
         block.toolName = blockObj[QStringLiteral("name")].toString();
-        hClaude() << "Tool use détecté:" << block.toolName
+        hClaude() << "Utilisation d'outil détectée :" << block.toolName
                   << "— id:" << block.toolUseId;
     }
 
@@ -741,7 +790,7 @@ void ClaudeAPI::handleContentBlockStop(const QJsonObject &data)
                                   << err.errorString();
         }
 
-        hClaude() << "Tool call complet:" << block.toolName
+        hClaude() << "Appel d'outil complet :" << block.toolName
                   << "— args:" << QString::fromUtf8(
                          QJsonDocument(args).toJson(QJsonDocument::Compact));
 
@@ -757,7 +806,7 @@ void ClaudeAPI::handleMessageDelta(const QJsonObject &data)
     QString stopReason = delta[QStringLiteral("stop_reason")].toString();
 
     if (!stopReason.isEmpty()) {
-        hClaude() << "Stop reason:" << stopReason;
+        hClaude() << "Raison d'arrêt :" << stopReason;
     }
 }
 
@@ -851,7 +900,7 @@ void ClaudeAPI::trySplitSentences()
     if (i > 0) m_sentenceBuffer = m_sentenceBuffer.mid(i);
 
     if (!sentence.isEmpty()) {
-        hClaude() << "Sentence ready (streaming):" << sentence.left(60);
+        hClaude() << "Phrase prête (streaming) :" << sentence.left(60);
         PIPELINE_EVENT(PipelineModule::Claude, EventType::SentenceReady,
                        {{"length", sentence.length()}, {"preview", sentence.left(60)}});
         emit sentenceReady(sentence);
@@ -863,7 +912,7 @@ void ClaudeAPI::flushSentenceBuffer()
     QString remaining = m_sentenceBuffer.trimmed();
     m_sentenceBuffer.clear();
     if (!remaining.isEmpty()) {
-        hClaude() << "Sentence flush (final):" << remaining.left(60);
+        hClaude() << "Phrase finale (flush) :" << remaining.left(60);
         emit sentenceReady(remaining);
     }
 }
@@ -918,7 +967,7 @@ void ClaudeAPI::processFullResponse(const QByteArray &data)
                     .toJson(QJsonDocument::Compact));
             m_contentBlocks.append(cb);
 
-            hClaude() << "Tool call (sync):" << cb.toolName;
+            hClaude() << "Appel d'outil (sync) :" << cb.toolName;
             emit toolCallDetected(cb.toolUseId, cb.toolName,
                                   block[QStringLiteral("input")].toObject());
         }
@@ -994,7 +1043,7 @@ void ClaudeAPI::onNetworkError(QNetworkReply::NetworkError error)
                    {{"error_code", static_cast<int>(error)},
                     {"total_errors", m_totalErrors}});
     PipelineEventBus::instance()->setModuleError(
-        PipelineModule::Claude, QStringLiteral("Network error %1").arg(static_cast<int>(error)));
+        PipelineModule::Claude, QStringLiteral("Erreur réseau %1").arg(static_cast<int>(error)));
 
     // ── Lire HTTP status + body brut pour diagnostiquer (Qt expose souvent
     //    `errorString()` vide alors que le serveur a renvoyé un JSON utile,
@@ -1023,6 +1072,23 @@ void ClaudeAPI::onNetworkError(QNetworkReply::NetworkError error)
               << "HTTP:" << httpStatus
               << "errorString:" << (m_currentReply ? m_currentReply->errorString() : QString())
               << "body:" << QString::fromUtf8(body.left(512));
+
+    // DEBUG LLM LOCK 2026-05-16 : si HTTP 4xx, dump payload + body bruts pour
+    // diagnostiquer le refus Anthropic (souvent schema d'outil invalide).
+    if (httpStatus >= 400 && httpStatus < 500) {
+        QFile dumpReq(QStringLiteral("D:/EXO/logs/claude_last_request.json"));
+        if (dumpReq.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            dumpReq.write(m_lastPayload);
+            dumpReq.close();
+        }
+        QFile dumpResp(QStringLiteral("D:/EXO/logs/claude_last_response.txt"));
+        if (dumpResp.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            dumpResp.write("HTTP " + QByteArray::number(httpStatus) + "\n");
+            dumpResp.write(body);
+            dumpResp.close();
+        }
+        hClaude() << "[LLM-DEBUG] payload+response dumped to D:/EXO/logs/claude_last_*";
+    }
 
     QString errorString;
 
@@ -1088,6 +1154,13 @@ void ClaudeAPI::onNetworkError(QNetworkReply::NetworkError error)
         || anthropicType == QStringLiteral("invalid_request_error")
         || anthropicType == QStringLiteral("not_found_error");
 
+    // Fallback automatique Opus → Sonnet sur 429/404/5xx (avant la décision finale)
+    if ((httpStatus == 429 || httpStatus == 404
+         || (httpStatus >= 500 && httpStatus < 600))
+        && tryFallbackModel(httpStatus)) {
+        return; // fallback déclenche un retry interne
+    }
+
     if (!isClientFatal && m_retryCount < MAX_RETRIES) {
         retryWithBackoff();
     } else {
@@ -1140,6 +1213,14 @@ void ClaudeAPI::handleHttpError(int httpStatus, const QByteArray &data)
                       || httpStatus == 502 || httpStatus == 503
                       || httpStatus == 529);
 
+    // Fallback automatique Opus → Sonnet sur erreurs critiques de chargement
+    // (429 rate-limit, 404 modèle introuvable, 5xx surcharge serveur).
+    if ((httpStatus == 429 || httpStatus == 404
+         || (httpStatus >= 500 && httpStatus < 600))
+        && tryFallbackModel(httpStatus)) {
+        return; // fallback déclenche un retry interne
+    }
+
     if (retryable && m_retryCount < MAX_RETRIES) {
         hClaude() << errorMsg << "— retry possible";
         retryWithBackoff();
@@ -1152,6 +1233,15 @@ void ClaudeAPI::handleHttpError(int httpStatus, const QByteArray &data)
 //  Robustesse : retry exponentiel
 // ═══════════════════════════════════════════════════════
 
+bool ClaudeAPI::tryFallbackModel(int httpStatus)
+{
+    // LLM LOCK 2026-05-16 : fallback automatique DESACTIVE. claude-opus-4.7
+    // est le seul modele autorise -- on ne bascule jamais vers Sonnet/Haiku
+    // meme en cas de 429/404/5xx. Le retry exponentiel sur le meme modele
+    // reste actif (gere par retryWithBackoff()).
+    Q_UNUSED(httpStatus);
+    return false;
+}
 void ClaudeAPI::retryWithBackoff()
 {
     ++m_retryCount;
@@ -2105,15 +2195,13 @@ QJsonArray ClaudeAPI::buildEXOTools()
 void ClaudeAPI::rebuildSkeleton() const
 {
     m_payloadSkeleton = QJsonObject();
-    m_payloadSkeleton[QStringLiteral("model")]       = m_model;
+    m_payloadSkeleton[QStringLiteral("model")]       = anthropicWireModelId(m_model);
     m_payloadSkeleton[QStringLiteral("max_tokens")]   = m_maxTokens;
-    m_payloadSkeleton[QStringLiteral("temperature")]  = m_temperature;
-    // Include top_p/top_k only when explicitly set (avoids empty fields in payload)
-    if (m_topP >= 0.0 && m_topP <= 1.0)
-        m_payloadSkeleton[QStringLiteral("top_p")] = m_topP;
-    if (m_topK >= 1)
-        m_payloadSkeleton[QStringLiteral("top_k")] = m_topK;
+    // LLM LOCK 2026-05-16 : `temperature`, `top_p` et `top_k` sont DEPRECATED
+    // pour claude-opus-4.7 (l'API renvoie HTTP 400 invalid_request_error si
+    // l'un de ces champs est present). On les omet systematiquement.
     m_skeletonDirty = false;
+    return;
 }
 
 // ── v26.2 Latency: contextual tool filtering ─────────
@@ -2259,7 +2347,7 @@ void ClaudeAPI::initWarmup()
 
     // Construire un payload minimal (non-streaming, 1 token max)
     QJsonObject payload;
-    payload[QStringLiteral("model")] = m_model;
+    payload[QStringLiteral("model")] = anthropicWireModelId(m_model);
     payload[QStringLiteral("max_tokens")] = 1;
     payload[QStringLiteral("stream")] = false;
     QJsonArray messages;

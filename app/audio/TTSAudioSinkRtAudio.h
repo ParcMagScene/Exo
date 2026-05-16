@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 
+#include "Hardening.h"  // LatencyWatchdog (opt-in via EXO_AUDIO_WATCHDOG_MS)
+
 class PCMRingBuffer;
 
 // ─────────────────────────────────────────────────────
@@ -65,6 +67,9 @@ private:
     std::atomic<bool>     m_running{false};
     std::atomic<uint64_t> m_underflowCount{0};
     std::atomic<uint64_t> m_framesWritten{0};
+    // Hardening 2026-05-16 : watchdog optionnel (log si jitter > seuil).
+    // Activé par EXO_AUDIO_WATCHDOG_MS (entier ms). Désactivé sinon.
+    std::unique_ptr<exo::hardening::LatencyWatchdog> m_watchdog;
 };
 
 #endif // ENABLE_RTAUDIO

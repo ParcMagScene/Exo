@@ -1,4 +1,4 @@
-﻿"""
+"""
 vad_server.py — EXO Silero VAD Server
 
 WebSocket server that receives PCM16 audio chunks and returns
@@ -275,10 +275,18 @@ async def main() -> None:
 
     import argparse
 
+    # Lecture seuil par defaut depuis ConfigManager (vad.threshold).
+    _cfg_threshold = 0.5
+    try:
+        from shared.config_manager import ConfigManager
+        _cfg_threshold = float(ConfigManager.instance().get("vad.threshold", 0.5))
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(description="EXO Silero VAD Server")
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
-    parser.add_argument("--threshold", type=float, default=0.5,
+    parser.add_argument("--threshold", type=float, default=_cfg_threshold,
                         help="VAD threshold (0.01-0.99)")
     args = parser.parse_args()
 
@@ -295,7 +303,7 @@ async def main() -> None:
 
     async def handler(ws):
         if _session_lock.locked():
-            await ws.send(json.dumps({"type": "error", "message": "VAD busy — another session is active"}))
+            await ws.send(json.dumps({"type": "error", "message": "VAD occupé — une autre session est active"}))
             await ws.close(1013, "VAD busy")
             logger.warning("Rejected VAD client — session already active")
             return

@@ -1,7 +1,8 @@
-﻿import QtQuick
+import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  CognitiveTimeline v2 — Timeline verticale temps réel
@@ -114,7 +115,7 @@ Rectangle {
             visible: !compact
 
             Text {
-                text: "COGNITIVE TIMELINE"
+                text: SettingsLabels.t("comp.cognitiveTimeline")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontMicro
                 font.weight: Font.Bold
@@ -142,7 +143,7 @@ Rectangle {
 
         Text {
             visible: compact
-            text: "COGNITION"
+            text: SettingsLabels.t("cognition.title")
             font.family: Theme.fontFamily
             font.pixelSize: 9
             font.weight: Font.Bold

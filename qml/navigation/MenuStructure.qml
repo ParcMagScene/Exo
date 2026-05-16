@@ -40,19 +40,11 @@ QtObject {
             ]
         },
         {
-            id: "historique",
-            label: "HISTORIQUE",
-            icon: "icons/history.svg",
-            items: [
-                { name: "history", icon: "icons/history.svg", label: "Historique" }
-            ]
-        },
-        {
             id: "logs",
-            label: "LOGS",
+            label: "JOURNAUX",
             icon: "icons/logs.svg",
             items: [
-                { name: "logsFull", icon: "icons/logs.svg", label: "Logs runtime" }
+                { name: "logsFull", icon: "icons/logs.svg", label: "Journaux runtime" }
             ]
         },
         {
@@ -74,9 +66,9 @@ QtObject {
             label: "PIPELINE",
             icon: "icons/pipeline.svg",
             items: [
-                { name: "voicePipeline", icon: "icons/pipeline.svg", label: "Voice Pipeline" },
-                { name: "observability", icon: "icons/logs.svg", label: "Logs + Metrics" },
-                { name: "logsFull", icon: "icons/logs.svg", label: "Logs runtime" }
+                { name: "voicePipeline", icon: "icons/pipeline.svg", label: "Pipeline Vocal" },
+                { name: "observability", icon: "icons/logs.svg", label: "Journaux + Métriques" },
+                { name: "logsFull", icon: "icons/logs.svg", label: "Journaux runtime" }
             ]
         },
         {

@@ -1,4 +1,4 @@
-﻿"""
+"""
 wakeword_server.py — EXO OpenWakeWord Server
 
 WebSocket server that receives PCM16 audio chunks and detects
@@ -288,7 +288,7 @@ async def main() -> None:
 
     async def handler(ws):
         if _session_lock.locked():
-            await ws.send(json.dumps({"type": "error", "message": "WakeWord busy — another session is active"}))
+            await ws.send(json.dumps({"type": "error", "message": "Wakeword occupé — une autre session est active"}))
             await ws.close(1013, "WakeWord busy")
             logger.warning("Rejected WakeWord client — session already active")
             return

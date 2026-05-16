@@ -2,10 +2,31 @@
 
 #include "AudioInputRtAudio.h"
 #include <QDebug>
+#include <cstdlib>
+#include <string>
 
 AudioInputRtAudio::AudioInputRtAudio(QObject *parent)
     : AudioInput(parent)
-{}
+{
+    // Hardening 2026-05-16 : init opt-in du watchdog audio.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4996) // std::getenv jugé "unsafe" par MSVC, lecture seule ici.
+#endif
+    const char *env = std::getenv("EXO_AUDIO_WATCHDOG_MS");
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+    if (env) {
+        try {
+            const int thresh = std::stoi(env);
+            if (thresh > 0) {
+                m_watchdog = std::make_unique<exo::hardening::LatencyWatchdog>(thresh);
+                qDebug() << "AudioInputRtAudio : LatencyWatchdog activé seuil" << thresh << "ms";
+            }
+        } catch (...) { /* env invalide : watchdog désactivé */ }
+    }
+}
 
 AudioInputRtAudio::~AudioInputRtAudio()
 {
@@ -141,7 +162,10 @@ int AudioInputRtAudio::rtCallback(void * /*outputBuffer*/, void *inputBuffer,
 {
     auto *self = static_cast<AudioInputRtAudio *>(userData);
     if (status)
-        qWarning() << "AudioInputRtAudio: stream overflow/underflow";
+        qWarning() << "AudioInputRtAudio : sur/sous-charge du stream";
+
+    // Hardening 2026-05-16 : watchdog opt-in (log uniquement, no-op si désactivé).
+    if (self->m_watchdog) self->m_watchdog->tick();
 
     if (self->m_suspended || !self->m_callback)
         return 0;

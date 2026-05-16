@@ -1,4 +1,4 @@
-﻿
+
 from __future__ import annotations
 import os
 import sys
@@ -419,8 +419,26 @@ MAX_CONSECUTIVE_HALLUCINATIONS = 3   # stop partials after N hallucinations in a
 class STTSession:
     """One WebSocket client session."""
     
-    # P1.2: Prevent buffer overflow DoS attack (10 MB ~= ~312 seconds @ 16kHz mono)
-    MAX_AUDIO_BUFFER_SIZE = 10 * 1024 * 1024
+    # P1.2: Prevent buffer overflow DoS attack.
+    # RAM-opt v9 : limite lue depuis exo_v9.json (stt.whisper.bufferSeconds, defaut 6s
+    # → mais on garde un plafond généreux ici car ce buffer accumule TOUT l'énoncé,
+    # pas juste la fenêtre de précomputation). Profil 64 Go → 16 MB (~8 min audio).
+    @staticmethod
+    def _resolve_max_buffer() -> int:
+        try:
+            from shared.config_manager import ConfigManager
+            cfg = ConfigManager.instance()
+            # buf_seconds reserve = window precompute spectrogramme ;
+            # on prend la plus grande de (16 MB par defaut, 4*buf*sr*2 bytes).
+            buf_s = int(cfg.get("stt.whisper.bufferSeconds",
+                                cfg.get("stt.whisper.buffer_seconds", 6)))
+            sr = int(cfg.get("audio.sample_rate", 16000))
+            computed = max(16 * 1024 * 1024, buf_s * sr * 2 * 80)  # ~80x marge
+            return computed
+        except Exception:
+            return 16 * 1024 * 1024
+
+    MAX_AUDIO_BUFFER_SIZE = 16 * 1024 * 1024  # RAM-opt v9 default; overriden in __init__
 
     def __init__(self, engine: STTEngine) -> None:
         self.engine = engine
@@ -432,6 +450,8 @@ class STTSession:
         self._partial_running = False  # True while a partial transcription is in executor
         self._engine_lock = asyncio.Lock()
         self._expected_seq = None  # Numéro de séquence attendu (int)
+        # RAM-opt v9 : override par instance pour reload-friendly
+        self.MAX_AUDIO_BUFFER_SIZE = self._resolve_max_buffer()
 
     async def handle(self, ws) -> None:
         """Handle a WebSocket connection."""
@@ -556,7 +576,7 @@ class STTSession:
             logger.error(error_msg)
             await ws.send(json.dumps({
                 "type": "error",
-                "message": "Audio buffer limit exceeded (10 MB, ~5 minutes max)"
+                "message": "Limite du buffer audio dépassée (10 Mo, ~5 minutes max)"
             }))
             return
 
@@ -586,7 +606,12 @@ class STTSession:
         # J5 (audit perf 2026-05-14) : np.frombuffer accepte un bytearray
         # directement (vue zero-copy). bytes(...) creait une copie inutile
         # de tout le buffer audio (typ. 16-48 KB par appel).
-        pcm = np.frombuffer(self._audio_buffer, dtype=np.int16)
+        # FIX 2026-05-16 : la vue zero-copy "verrouille" le bytearray
+        # (Py_buffer export) -> extend()/clear() concurrents lèvent
+        # "Existing exports of data: object cannot be re-sized" et tuent la
+        # session WebSocket. On copie immédiatement pour libérer le buffer
+        # avant le passage en executor.
+        pcm = np.array(np.frombuffer(self._audio_buffer, dtype=np.int16), copy=True)
         try:
             loop = asyncio.get_running_loop()
             async with self._engine_lock:
@@ -689,7 +714,7 @@ class STTSession:
             logger.error("Final transcription timeout after 20s")
             await ws.send(json.dumps({
                 "type": "error",
-                "message": "Transcription timeout (20s)",
+                "message": "Délai de transcription dépassé (20s)",
             }))
         except Exception as e:
             logger.error("Final transcription error: %s", e)
@@ -764,6 +789,18 @@ async def main() -> None:
     logger.info("[Latency] STT model=%s device=%s backend=%s beam=%d threads=%d",
                 args.model, engine.actual_device, engine._active_backend,
                 args.beam_size, args.threads)
+
+    # Hardening 2026-05-16 (R5) — warmup explicite : amortit la 1re inférence
+    # (compilation kernels Vulkan/CUDA, allocations) pour éviter la latence
+    # élevée sur la première vraie requête utilisateur. Non bloquant.
+    try:
+        t_warm = time.monotonic()
+        silence = np.zeros(16000, dtype=np.int16)  # 1 s de silence à 16 kHz
+        _ = engine.transcribe(silence)
+        warm_ms = (time.monotonic() - t_warm) * 1000
+        logger.info("[Latency] Warmup STT: OK (%.0f ms)", warm_ms)
+    except Exception as exc:
+        logger.warning("[Latency] Warmup STT échoué (non bloquant): %s", exc)
 
     async def handler(ws):
         session = STTSession(engine)

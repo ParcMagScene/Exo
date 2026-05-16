@@ -78,8 +78,18 @@ log.info("=== EXO CONTEXT_ENGINE STARTUP ===")
 _file_handler.flush()
 
 PORT = 8777
-MAX_EVENTS = 200
-MAX_INTERACTIONS = 50
+
+# RAM-opt v9 : seuils lus depuis exo_v9.json (context.maxHistory / orchestrator.maxPendingEvents).
+try:
+    from shared.config_manager import ConfigManager as _CM
+    _cm = _CM.instance()
+    MAX_EVENTS = int(_cm.get("orchestrator.maxPendingEvents",
+                              _cm.get("orchestrator.max_pending_events", 256)))
+    MAX_INTERACTIONS = int(_cm.get("context.maxHistory",
+                                    _cm.get("context.max_history", 200)))
+except Exception:
+    MAX_EVENTS = 256
+    MAX_INTERACTIONS = 200
 
 # v8: Preference detection patterns
 PREFERENCE_PATTERNS = {

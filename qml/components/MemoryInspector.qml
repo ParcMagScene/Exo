@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  MemoryInspector — Vue mémoire sémantique EXO
@@ -61,7 +62,7 @@ Rectangle {
             Layout.fillWidth: true
 
             Text {
-                text: "MEMORY INSPECTOR"
+                text: SettingsLabels.t("comp.memoryInspector")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontMicro
                 font.weight: Font.Bold
@@ -194,7 +195,7 @@ Rectangle {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Aucune interaction récente"
+                    text: SettingsLabels.t("comp.memoryNoInteractions")
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSmall
                     color: Theme.textMuted
@@ -265,7 +266,7 @@ Rectangle {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Aucune memoire long terme"
+                    text: SettingsLabels.t("comp.memoryNoLongTerm")
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSmall
                     color: Theme.textMuted
@@ -391,7 +392,7 @@ Rectangle {
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: "Aucune recherche vectorielle récente"
+                    text: SettingsLabels.t("comp.memoryNoVector")
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSmall
                     color: Theme.textMuted

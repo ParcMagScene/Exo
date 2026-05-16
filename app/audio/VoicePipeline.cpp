@@ -881,7 +881,7 @@ void VoicePipeline::initWakeWordServer(const QString &url)
     connect(m_wakewordWs, &WebSocketClient::textReceived,
             this, &VoicePipeline::onWakeWordWsMessage);
     m_wakewordWs->open(QUrl(url));
-    hVoice() << "Connecting to OpenWakeWord server:" << url;
+    hVoice() << "Connexion au serveur OpenWakeWord :" << url;
 }
 
 void VoicePipeline::onWakeWordWsConnected()
@@ -891,7 +891,7 @@ void VoicePipeline::onWakeWordWsConnected()
 
 void VoicePipeline::onWakeWordWsDisconnected()
 {
-    hWarning(exoVoice) << "OpenWakeWord server disconnected — fallback transcript detection";
+    hWarning(exoVoice) << "Serveur OpenWakeWord déconnecté — repli sur détection transcript";
     // Reconnection automatique gérée par WebSocketClient
 }
 
@@ -1301,7 +1301,9 @@ void VoicePipeline::onAudioSamples(const int16_t *samples, int count)
     processAudioChunk(chunkBuf.data(), count);
 
     qint64 us = timer.nsecsElapsed() / 1000;
-    if (us > 500) {
+    // STABILISATION v10 2026-05-16 : seuil releve de 500us a 15000us. Le budget
+    // temps-reel pour 512 samples @16kHz est ~32ms ; sous 15ms on est large.
+    if (us > 15000) {
         hWarning(exoVoice) << "[PERF] VoicePipeline::onAudioSamples slow path:" << us << "us for" << count << "samples";
     }
 }
@@ -1326,7 +1328,8 @@ void VoicePipeline::processAudioChunk(const int16_t *samples, int count)
     }
 
     qint64 us = timer.nsecsElapsed() / 1000;
-    if (us > 500) {
+    // STABILISATION v10 2026-05-16 : seuil releve de 500us a 15000us (voir onAudioSamples).
+    if (us > 15000) {
         hWarning(exoVoice) << "[PERF] VoicePipeline::processAudioChunk slow path:" << us << "us for" << count << "samples";
     }
 
@@ -1612,7 +1615,7 @@ void VoicePipeline::handleRecording(const int16_t *samples, int count)
     m_utteranceBuf.insert(m_utteranceBuf.end(), samples, samples + toAdd);
 
     if (m_utteranceBuf.size() >= MAX_UTTERANCE_SAMPLES) {
-        hVoice() << "Utterance buffer plein — fin de capture";
+        hVoice() << "Buffer d'énoncé plein — fin de capture";
         finishUtterance();
     }
 }
@@ -1625,7 +1628,7 @@ void VoicePipeline::finishUtterance()
                     {"duration_ms", static_cast<qint64>(m_utteranceBuf.size() * 1000 / SAMPLE_RATE)}});
 
     if (m_utteranceBuf.empty()) {
-        hVoice() << "Utterance vide — retour à Idle";
+        hVoice() << "Énoncé vide — retour à l'état Idle";
         if (m_sttStreaming) {
             m_stt->cancelUtterance();
             m_sttStreaming = false;
@@ -1679,7 +1682,7 @@ void VoicePipeline::dispatchTranscript(const QString &text)
                    {{"text", text}, {"length", text.length()}});
 
     m_lastCommand = text;
-    hVoice() << "Transcript final:" << text;
+    hVoice() << "Transcription finale :" << text;
 
     // v26.2 Latency: fast-path for simple intents (bypass Claude)
     if (handleFastPath(text)) {
@@ -1855,7 +1858,7 @@ bool VoicePipeline::handleFastPath(const QString &text)
 
 void VoicePipeline::onUtteranceTimeout()
 {
-    hVoice() << "Utterance timeout (" << UTTERANCE_TIMEOUT_MS << "ms)";
+    hVoice() << "Délai d'énoncé dépassé (" << UTTERANCE_TIMEOUT_MS << "ms)";
     if (m_state == PipelineState::Listening || m_state == PipelineState::DetectingSpeech) {
         finishUtterance();
     }
@@ -1863,7 +1866,7 @@ void VoicePipeline::onUtteranceTimeout()
 
 void VoicePipeline::onTranscribeTimeout()
 {
-    hWarning(exoVoice) << "Transcription timeout (" << TRANSCRIBE_TIMEOUT_MS
+    hWarning(exoVoice) << "Délai de transcription dépassé (" << TRANSCRIBE_TIMEOUT_MS
                          << "ms) — pipeline bloqué en Transcribing, retour Idle";
     if (m_state == PipelineState::Transcribing) {
         if (m_stt && m_stt->isConnected()) {
@@ -2024,6 +2027,14 @@ void VoicePipeline::onTtsStarted()
     PIPELINE_STATE(PipelineModule::AudioOutput, ModuleState::Active);
     m_ttsPlaybackStart.restart();
     setState(PipelineState::Speaking);  // v5: setState gère m_isSpeaking + speakingChanged
+    // STABILISATION v10 2026-05-16 : rearmer explicitement le watchdog a chaque
+    // nouvelle phrase. setState() retourne early si on est deja Speaking, donc
+    // sans ce rearmement le timer 20s arme par la 1re phrase tuait les recits
+    // multi-phrases en cours (cas b8a56352 : 25s d'histoire en 5 phrases coupee
+    // a la 4e). Le watchdog represente "TTS audio progresse-t-il ?" : un ping
+    // a chaque playback_started est la semantique correcte.
+    if (m_speakingWatchdog)
+        m_speakingWatchdog->start(SPEAKING_WATCHDOG_MS);
 }
 
 void VoicePipeline::onTtsFinished()

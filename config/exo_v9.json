@@ -1,0 +1,191 @@
+{
+  "_meta": {
+    "purpose": "EXO RAM-optimized profile (64 GB DDR4 @ 3200 MT/s)",
+    "applied": "2026-05-16",
+    "notes": [
+      "Loaded by python/shared/config_manager.py (singleton, hot-reload ~2s).",
+      "Schema deep-merged with _DEFAULT_CONFIG; existing keys kept unless overridden.",
+      "camelCase keys mirrored to snake_case for Python consumers."
+    ]
+  },
+
+  "audio": {
+    "backend": "rtaudio",
+    "sample_rate": 16000,
+    "channels": 1,
+    "bufferSize": 4096,
+    "buffer_size": 4096,
+    "preloadChunks": 8,
+    "preload_chunks": 8,
+    "streamWindow": 150,
+    "stream_window_ms": 150
+  },
+
+  "dsp": {
+    "noiseReductionStrength": 0.50,
+    "noise_reduction_strength": 0.50
+  },
+
+  "vad": {
+    "backend": "silero",
+    "threshold": 0.40,
+    "websocket": {
+      "retryDelay": 500,
+      "retry_delay_ms": 500,
+      "maxRetries": 3,
+      "max_retries": 3,
+      "timeout": 2000,
+      "timeout_ms": 2000
+    }
+  },
+
+  "stt": {
+    "backend": "whispercpp",
+    "model": "small",
+    "language": "fr",
+    "beam_size": 1,
+    "timeout_s": 3,
+    "retries": 1,
+    "whisper": {
+      "precompute": true,
+      "bufferSeconds": 6,
+      "buffer_seconds": 6,
+      "cacheSpectrogram": true,
+      "cache_spectrogram": true,
+      "maxSegmentLength": 32,
+      "max_segment_length": 32,
+      "maxContext": 2048,
+      "max_context": 2048
+    }
+  },
+
+  "tts": {
+    "backend": "orpheus",
+    "backends": ["orpheus"],
+    "fallback": null,
+    "voice": "orpheus",
+    "language": "fr",
+    "timeout_s": 3,
+    "retries": 1,
+    "preload": true,
+    "style": "neutral",
+    "pitch": 1.00,
+    "rate": 0.90,
+    "pacing": {
+      "sentencePause": 180,
+      "sentence_pause_ms": 180,
+      "commaPause": 90,
+      "comma_pause_ms": 90
+    },
+    "cache": {
+      "enabled": true,
+      "maxVoices": 1,
+      "max_voices": 1,
+      "maxTokens": 4096,
+      "max_tokens": 4096
+    },
+    "vocoder": {
+      "prewarm": true
+    }
+  },
+
+  "llm": {
+    "model": "claude-opus-4.7",
+    "fallback_model": "claude-opus-4.7",
+    "streaming": true,
+    "deprecation_notice": "claude-opus-4.7 only — no fallback, no temperature/top_p/top_k",
+    "max_tokens": 4096,
+    "timeout_s": 10,
+    "retries": 2
+  },
+
+  "context": {
+    "maxTokens": 8192,
+    "max_tokens": 8192,
+    "maxHistory": 200,
+    "max_history": 200,
+    "cache": {
+      "enabled": true,
+      "maxEntries": 256,
+      "max_entries": 256
+    }
+  },
+
+  "memory": {
+    "faiss": {
+      "index": "HNSW32",
+      "m": 32,
+      "cacheRAM": true,
+      "cache_ram": true,
+      "maxVectors": 200000,
+      "max_vectors": 200000,
+      "efSearch": 64,
+      "ef_search": 64,
+      "efConstruction": 128,
+      "ef_construction": 128
+    }
+  },
+  "faiss": {
+    "index": "HNSW32",
+    "m": 32,
+    "cacheRAM": true,
+    "cache_ram": true,
+    "maxVectors": 200000,
+    "max_vectors": 200000,
+    "efSearch": 64,
+    "ef_search": 64,
+    "efConstruction": 128,
+    "ef_construction": 128
+  },
+
+  "orchestrator": {
+    "preloadServices": true,
+    "preload_services": true,
+    "cacheStates": true,
+    "cache_states": true,
+    "bufferTransitions": true,
+    "buffer_transitions": true,
+    "maxPendingEvents": 256,
+    "max_pending_events": 256
+  },
+
+  "ws": {
+    "bufferSize": 4194304,
+    "buffer_size": 4194304,
+    "maxMessageSize": 8388608,
+    "max_message_size": 8388608
+  },
+
+  "services": {
+    "preload": true,
+    "cache": {
+      "enabled": true
+    }
+  },
+
+  "logs": {
+    "level": "INFO",
+    "log_to_file": true,
+    "log_to_console": true,
+    "buffer": 67108864,
+    "max_bytes": 10485760,
+    "backup_count": 3
+  },
+
+  "cache": {
+    "max_entries": 256,
+    "default_ttl_s": 60
+  },
+
+  "metrics": {
+    "enabled": true,
+    "export_interval_s": 60
+  },
+
+  "supervisor": {
+    "check_interval_s": 10,
+    "ping_timeout_s": 5,
+    "degraded_latency_ms": 2000,
+    "max_restart_attempts": 3
+  }
+}

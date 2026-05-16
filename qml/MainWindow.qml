@@ -355,7 +355,7 @@ ApplicationWindow {
                     }
 
                     Text {
-                        text: "Ouvrir paramètres ›"
+                        text: SettingsLabels.t("app.openSettings")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontMicro
                         color: Theme.info
@@ -601,7 +601,7 @@ ApplicationWindow {
                             Text {
                                 anchors.fill: parent
                                 verticalAlignment: Text.AlignVCenter
-                                text: "Tapez votre message ici…"
+                                text: SettingsLabels.t("app.chatPlaceholder")
                                 font.family: parent.font.family
                                 font.pixelSize: parent.font.pixelSize
                                 color: Theme.textMuted
@@ -620,7 +620,7 @@ ApplicationWindow {
                     }
 
                     Button {
-                        text: "Envoyer"
+                        text: SettingsLabels.t("app.send")
                         Layout.preferredWidth: 80
                         Layout.preferredHeight: 30
 
@@ -772,7 +772,7 @@ ApplicationWindow {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Interface en mode secours"
+                        text: SettingsLabels.t("app.safeMode")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontBody
                         font.bold: true
@@ -782,7 +782,7 @@ ApplicationWindow {
                     Text {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "L'interface principale n'est pas visible alors que la fenetre est lancee."
+                        text: SettingsLabels.t("app.safeModeDescription")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.textPrimary
@@ -790,7 +790,7 @@ ApplicationWindow {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Etat: splash=" + splashScreen.visible
+                        text: "État : splash=" + splashScreen.visible
                               + " | safeboot=" + safeBootPanel.visible
                               + " | main=" + mainLayout.visible
                         font.family: Theme.fontMono
@@ -803,7 +803,7 @@ ApplicationWindow {
                         spacing: Theme.spacing8
 
                         Button {
-                            text: "Reafficher l'interface"
+                            text: SettingsLabels.t("app.showInterface")
                             onClicked: {
                                 mainWindow.startupFallbackVisible = false
                                 mainLayout.visible = true
@@ -811,7 +811,7 @@ ApplicationWindow {
                         }
 
                         Button {
-                            text: "Ouvrir Services"
+                            text: SettingsLabels.t("app.openServices")
                             onClicked: {
                                 mainWindow.startupFallbackVisible = false
                                 sidebar.activePanel = "services"

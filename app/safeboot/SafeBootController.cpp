@@ -328,7 +328,7 @@ void SafeBootController::checkCriticalReady()
     addTimelineEvent(QStringLiteral("critical_ready"), {},
                      QStringLiteral("Tous les services critiques sont prêts"));
 
-    hLog() << "[SafeBoot] ═══ CRITICAL SERVICES READY ═══";
+    hLog() << "[SafeBoot] ═══ SERVICES CRITIQUES PRÊTS ═══";
 
     emit criticalServicesReady();
 
@@ -534,7 +534,7 @@ void SafeBootController::onAutoRepairCompleted()
     if (allCriticalOk && m_safeBootEnabled) {
         addTimelineEvent(QStringLiteral("autorepair_success"), {},
                          QStringLiteral("Tous les critiques réparés — retour en mode normal"));
-        hLog() << "[SafeBoot] ═══ AUTO-REPAIR SUCCESS — retour mode normal ═══";
+        hLog() << "[SafeBoot] ═══ AUTO-RÉPARATION RÉUSSIE — retour mode normal ═══";
 
         disableSafeBoot();
 

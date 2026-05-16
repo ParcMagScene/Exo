@@ -42,7 +42,17 @@ GOVERNANCE_RULES = [
 CONFIDENCE_THRESHOLD = 0.6
 RISK_THRESHOLD = 0.7
 NOVELTY_THRESHOLD = 0.8
-MAX_PENDING = 50
+# RAM-opt v9 : maxPendingEvents lu depuis exo_v9.json (orchestrator.maxPendingEvents).
+try:
+    from shared.config_manager import ConfigManager as _CM
+    MAX_PENDING = int(
+        _CM.instance().get(
+            "orchestrator.maxPendingEvents",
+            _CM.instance().get("orchestrator.max_pending_events", 256),
+        )
+    )
+except Exception:
+    MAX_PENDING = 256
 
 
 class CognitiveGovernor:

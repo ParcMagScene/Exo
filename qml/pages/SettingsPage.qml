@@ -5,6 +5,18 @@ import "../theme"
 import "../components"
 import "../core"
 
+// ═══════════════════════════════════════════════════════════════════
+//  EXO — Page Paramètres
+//  Sections organisées selon le pipeline d'exécution :
+//   1. Entrée audio (Microphone & VAD)
+//   2. Reconnaissance vocale (STT)
+//   3. Orchestrateur & Mémoire
+//   4. Modèle LLM
+//   5. Synthèse vocale (TTS)
+//   6. Interface & Affichage
+//   7. Services externes (Météo, API)
+//   8. Diagnostics & Tests
+// ═══════════════════════════════════════════════════════════════════
 Rectangle {
     id: root
     color: Theme.bgPrimary
@@ -36,13 +48,35 @@ Rectangle {
         }
     }
 
+    // ── Composant utilitaire : séparateur visuel entre sections ──
+    component SectionSeparator : Rectangle {
+        Layout.fillWidth: true
+        height: 1
+        color: Theme.border
+        opacity: 0.4
+    }
+
+    // ── Composant utilitaire : titre de section ──
+    component SectionTitle : Text {
+        font.family: Theme.fontMono
+        font.pixelSize: Theme.fontSmall
+        font.bold: true
+        color: Theme.textPrimary
+    }
+
+    // ── Composant utilitaire : libellé de champ ──
+    component FieldLabel : Text {
+        font.family: Theme.fontMono
+        font.pixelSize: Theme.fontCaption
+        color: Theme.textSecondary
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
-        // ── Header ──
         ExoPanelHeader {
-            title: "PARAMÈTRES"
+            title: SettingsLabels.t("app.settingsTitle")
         }
 
         Flickable {
@@ -62,487 +96,21 @@ Rectangle {
                 y: Theme.spacing16
                 spacing: Theme.spacing20
 
-                // ── Section : Interface ──
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing12
-
-                    Text {
-                        text: "Interface"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: 50
-                        color: Theme.bgSecondary
-                        border.color: Theme.border
-                        border.width: 1
-                        radius: Theme.radiusSmall
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: Theme.spacing12
-                            anchors.rightMargin: Theme.spacing12
-                            spacing: Theme.spacing12
-
-                            ColumnLayout {
-                                spacing: 2
-                                Layout.fillWidth: true
-
-                                Text {
-                                    text: "Mode Expert"
-                                    font.family: Theme.fontMono
-                                    font.pixelSize: Theme.fontSmall
-                                    color: Theme.textPrimary
-                                    font.bold: true
-                                }
-
-                                Text {
-                                    text: "Afficher tous les panneaux avancés"
-                                    font.family: Theme.fontMono
-                                    font.pixelSize: Theme.fontCaption
-                                    color: Theme.textSecondary
-                                }
-                            }
-
-                            Switch {
-                                id: expertModeToggle
-                                checked: typeof UIState !== 'undefined' ? UIState.expertMode : false
-                                onCheckedChanged: {
-                                    if (typeof UIState !== 'undefined') {
-                                        UIState.setExpertMode(checked)
-                                        if (typeof MenuStructure !== 'undefined') {
-                                            MenuStructure.refreshMenu()
-                                        }
-                                        console.log("[Settings] Mode Expert basculé à:", checked)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ── Séparateur ──
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.border
-                    opacity: 0.3
-                }
-
-                // ── Section : Voice ──
+                // ═══════════════════════════════════════════════════
+                //  1 ── ENTRÉE AUDIO (Microphone & VAD)
+                // ═══════════════════════════════════════════════════
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing8
 
-                    Text {
-                        text: "Voice"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
+                    SectionTitle { text: "1. Entrée audio (Microphone & VAD)" }
 
-                    // Wake word
+                    // ── Périphérique d'entrée audio ──
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing4
 
-                        Text {
-                            text: "assistant.wakeWord"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 30
-                            radius: Theme.radiusSmall
-                            color: Theme.bgInput
-                            border.color: wakeInput.activeFocus ? Theme.borderFocus : "transparent"
-
-                            Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
-
-                            TextInput {
-                                id: wakeInput
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.spacing8
-                                anchors.rightMargin: Theme.spacing8
-                                verticalAlignment: TextInput.AlignVCenter
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontSmall
-                                color: Theme.textPrimary
-                                selectByMouse: true
-                                selectionColor: Theme.accentActive
-                                text: typeof configManager !== 'undefined'
-                                      ? configManager.getWakeWord() : "EXO"
-
-                                onAccepted: {
-                                    if (typeof configManager !== 'undefined')
-                                        configManager.setWakeWord(text)
-                                    if (typeof voiceManager !== 'undefined')
-                                        voiceManager.setWakeWord(text)
-                                }
-                                onActiveFocusChanged: {
-                                    if (!activeFocus && typeof configManager !== 'undefined') {
-                                        configManager.setWakeWord(text)
-                                        if (typeof voiceManager !== 'undefined')
-                                            voiceManager.setWakeWord(text)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Audio Backend + STT Language (side by side)
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing8
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: Theme.spacing4
-
-                            Text {
-                                text: "audio.backend"
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontCaption
-                                color: Theme.textSecondary
-                            }
-
-                            ComboBox {
-                                id: audioBackendCombo
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 30
-                                model: ListModel {
-                                    ListElement { text: "Qt Multimedia"; value: "qt" }
-                                    ListElement { text: "RtAudio (WASAPI)"; value: "rtaudio" }
-                                }
-                                textRole: "text"
-                                valueRole: "value"
-
-                                Component.onCompleted: {
-                                    var backend = typeof configManager !== 'undefined'
-                                                  ? configManager.getString("Audio", "backend", "qt") : "qt"
-                                    for (var i = 0; i < model.count; i++) {
-                                        if (model.get(i).value === backend) {
-                                            currentIndex = i
-                                            break
-                                        }
-                                    }
-                                }
-
-                                onActivated: {
-                                    var val = model.get(currentIndex).value
-                                    if (typeof configManager !== 'undefined')
-                                        configManager.setUserValue("Audio", "backend", val)
-                                }
-
-                                background: Rectangle {
-                                    color: Theme.bgInput
-                                    border.color: audioBackendCombo.activeFocus ? Theme.borderFocus : "transparent"
-                                    radius: Theme.radiusSmall
-                                }
-                                contentItem: Text {
-                                    text: audioBackendCombo.displayText
-                                    color: Theme.textPrimary
-                                    font.family: Theme.fontMono
-                                    font.pixelSize: Theme.fontSmall
-                                    verticalAlignment: Text.AlignVCenter
-                                    leftPadding: Theme.spacing8
-                                }
-                            }
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: Theme.spacing4
-
-                            Text {
-                                text: "stt.language"
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontCaption
-                                color: Theme.textSecondary
-                            }
-
-                            ComboBox {
-                                id: langCombo
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 30
-                                model: ListModel {
-                                    ListElement { text: "Français"; value: "fr" }
-                                    ListElement { text: "English"; value: "en" }
-                                    ListElement { text: "Español"; value: "es" }
-                                    ListElement { text: "Deutsch"; value: "de" }
-                                    ListElement { text: "Italiano"; value: "it" }
-                                    ListElement { text: "Português"; value: "pt" }
-                                    ListElement { text: "日本語"; value: "ja" }
-                                    ListElement { text: "中文"; value: "zh" }
-                                }
-                                textRole: "text"
-                                valueRole: "value"
-
-                                Component.onCompleted: {
-                                    var lang = typeof configManager !== 'undefined'
-                                               ? configManager.getSTTLanguage() : "fr"
-                                    for (var i = 0; i < model.count; i++) {
-                                        if (model.get(i).value === lang) {
-                                            currentIndex = i
-                                            break
-                                        }
-                                    }
-                                }
-
-                                onActivated: {
-                                    var val = model.get(currentIndex).value
-                                    if (typeof configManager !== 'undefined')
-                                        configManager.setUserValue("STT", "language", val)
-                                    if (typeof voiceManager !== 'undefined')
-                                        voiceManager.setSTTLanguage(val)
-                                }
-
-                                background: Rectangle {
-                                    radius: Theme.radiusSmall
-                                    color: Theme.bgInput
-                                    border.color: langCombo.activeFocus ? Theme.borderFocus : "transparent"
-                                }
-
-                                contentItem: Text {
-                                    leftPadding: Theme.spacing8
-                                    text: langCombo.displayText
-                                    font.family: Theme.fontMono
-                                    font.pixelSize: Theme.fontSmall
-                                    color: Theme.textPrimary
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                delegate: ItemDelegate {
-                                    width: langCombo.width
-                                    contentItem: Text {
-                                        text: model.text
-                                        font.family: Theme.fontMono
-                                        font.pixelSize: Theme.fontSmall
-                                        color: Theme.textPrimary
-                                    }
-                                    background: Rectangle {
-                                        color: highlighted ? Theme.accentActive : Theme.bgSecondary
-                                    }
-                                }
-
-                                popup: Popup {
-                                    y: langCombo.height
-                                    width: langCombo.width
-                                    implicitHeight: contentItem.implicitHeight
-                                    padding: 1
-
-                                    contentItem: ListView {
-                                        clip: true
-                                        implicitHeight: contentHeight
-                                        model: langCombo.popup.visible ? langCombo.delegateModel : null
-                                        currentIndex: langCombo.highlightedIndex
-                                    }
-
-                                    background: Rectangle {
-                                        color: Theme.bgSecondary
-                                        border.color: Theme.border
-                                        radius: Theme.radiusSmall
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Séparateur
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.border
-                }
-
-                // ── Section : Weather ──
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing8
-
-                    Text {
-                        text: "Weather"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing4
-
-                        Text {
-                            text: "weather.city"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Theme.spacing8
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 30
-                                radius: Theme.radiusSmall
-                                color: Theme.bgInput
-                                border.color: cityInput.activeFocus ? Theme.borderFocus : "transparent"
-
-                                Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
-
-                                TextInput {
-                                    id: cityInput
-                                    anchors.fill: parent
-                                    anchors.leftMargin: Theme.spacing8
-                                    anchors.rightMargin: Theme.spacing8
-                                    verticalAlignment: TextInput.AlignVCenter
-                                    font.family: Theme.fontMono
-                                    font.pixelSize: Theme.fontSmall
-                                    color: Theme.textPrimary
-                                    selectByMouse: true
-                                    selectionColor: Theme.accentActive
-                                    text: typeof configManager !== 'undefined'
-                                          ? configManager.getWeatherCity() : "Paris"
-
-                                    Keys.onReturnPressed: {
-                                        if (typeof configManager !== 'undefined')
-                                            configManager.setWeatherCity(cityInput.text)
-                                        if (typeof weatherManager !== 'undefined')
-                                            weatherManager.setCity(cityInput.text)
-                                    }
-                                    onActiveFocusChanged: {
-                                        if (!activeFocus && typeof configManager !== 'undefined') {
-                                            configManager.setWeatherCity(cityInput.text)
-                                            if (typeof weatherManager !== 'undefined')
-                                                weatherManager.setCity(cityInput.text)
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: 80
-                                height: 30
-                                radius: Theme.radiusSmall
-                                color: detectArea.containsMouse ? Theme.accentHover : Theme.accent
-
-                                Behavior on color { ColorAnimation { duration: Theme.animFast } }
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Détecter"
-                                    font.family: Theme.fontMono
-                                    font.pixelSize: Theme.fontMicro
-                                    color: "#FFFFFF"
-                                }
-
-                                MouseArea {
-                                    id: detectArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (typeof configManager !== 'undefined')
-                                            configManager.detectLocation()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Séparateur
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.border
-                }
-
-                // ── Section : Claude API ──
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing8
-
-                    Text {
-                        text: "Claude API"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing4
-
-                        Text {
-                            text: "claude.model"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 30
-                            radius: Theme.radiusSmall
-                            color: Theme.bgInput
-
-                            Text {
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.spacing8
-                                verticalAlignment: Text.AlignVCenter
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontSmall
-                                color: Theme.warning
-                                text: typeof configManager !== 'undefined'
-                                      ? configManager.getClaudeModel() : "claude-3-haiku"
-                            }
-                        }
-                    }
-                }
-
-                // Séparateur
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.border
-                }
-
-                // ── Section : Microphone ──
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing8
-
-                    Text {
-                        text: "Microphone"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
-
-                    // ── Device selector ──
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing4
-
-                        Text {
-                            text: "audio.inputDevice"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
+                        FieldLabel { text: SettingsLabels.t("audio.inputDevice") }
 
                         ComboBox {
                             id: micDeviceCombo
@@ -582,11 +150,11 @@ Rectangle {
                         }
                     }
 
-                    // ── Error message when no device ──
+                    // ── Message d'erreur si aucun micro ──
                     Text {
                         visible: typeof audioDeviceManager !== 'undefined'
                                  && !audioDeviceManager.hasValidInputDevice
-                        text: "⚠ Aucun micro détecté — mode clavier activé"
+                        text: "⚠ Aucun microphone détecté — mode clavier activé"
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontMicro
                         color: Theme.error
@@ -594,7 +162,7 @@ Rectangle {
                         Layout.fillWidth: true
                     }
 
-                    // ── Audio status indicator ──
+                    // ── Indicateur état audio ──
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing8
@@ -614,8 +182,8 @@ Rectangle {
                             text: {
                                 if (typeof audioDeviceManager === 'undefined') return "Inconnu"
                                 switch (audioDeviceManager.audioStatus) {
-                                    case "healthy": return "Micro OK"
-                                    case "down":    return "Micro indisponible"
+                                    case "healthy": return "Microphone opérationnel"
+                                    case "down":    return "Microphone indisponible"
                                     default:        return "En attente…"
                                 }
                             }
@@ -625,17 +193,13 @@ Rectangle {
                         }
                     }
 
-                    // ── VU Meter ──
+                    // ── VU-mètre niveau micro ──
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing2
 
-                        Text {
-                            text: "Niveau micro"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontMicro
-                            color: Theme.textSecondary
-                        }
+                        FieldLabel { text: SettingsLabels.t("audio.level") }
+
                         Rectangle {
                             Layout.fillWidth: true
                             height: 8
@@ -662,7 +226,7 @@ Rectangle {
                         }
                     }
 
-                    // ── Test micro + Windows settings buttons ──
+                    // ── Boutons : Tester le microphone + Source audio Windows ──
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing8
@@ -670,7 +234,7 @@ Rectangle {
                         Button {
                             text: typeof audioDeviceManager !== 'undefined'
                                   && audioDeviceManager.audioTestRunning
-                                  ? "Arrêter test" : "🎙 Tester le micro"
+                                  ? "Arrêter le test" : "🎙 Tester le microphone"
                             Layout.fillWidth: true
                             Layout.preferredHeight: 28
 
@@ -699,9 +263,9 @@ Rectangle {
                         }
 
                         Button {
-                            text: "⚙ Son Windows"
+                            text: "⚙ Source audio Windows"
                             Layout.preferredHeight: 28
-                            Layout.preferredWidth: 120
+                            Layout.preferredWidth: 160
 
                             onClicked: {
                                 if (typeof audioDeviceManager !== 'undefined')
@@ -725,7 +289,6 @@ Rectangle {
                         }
                     }
 
-                    // Séparateur interne
                     Rectangle {
                         Layout.fillWidth: true
                         height: 1
@@ -734,19 +297,106 @@ Rectangle {
                         Layout.bottomMargin: Theme.spacing4
                     }
 
-                    // VAD Threshold slider
+                    // ── Système audio (backend Qt / RtAudio) ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing4
+
+                        FieldLabel { text: SettingsLabels.t("audio.backend") }
+
+                        ComboBox {
+                            id: audioBackendCombo
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            model: ListModel {
+                                ListElement { text: "Qt Multimedia"; value: "qt" }
+                                ListElement { text: "RtAudio (WASAPI)"; value: "rtaudio" }
+                            }
+                            textRole: "text"
+                            valueRole: "value"
+
+                            Component.onCompleted: {
+                                var backend = typeof configManager !== 'undefined'
+                                              ? configManager.getString("Audio", "backend", "qt") : "qt"
+                                for (var i = 0; i < model.count; i++) {
+                                    if (model.get(i).value === backend) {
+                                        currentIndex = i
+                                        break
+                                    }
+                                }
+                            }
+
+                            onActivated: {
+                                var val = model.get(currentIndex).value
+                                if (typeof configManager !== 'undefined')
+                                    configManager.setUserValue("Audio", "backend", val)
+                            }
+
+                            background: Rectangle {
+                                color: Theme.bgInput
+                                border.color: audioBackendCombo.activeFocus ? Theme.borderFocus : "transparent"
+                                radius: Theme.radiusSmall
+                            }
+                            contentItem: Text {
+                                text: audioBackendCombo.displayText
+                                color: Theme.textPrimary
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSmall
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: Theme.spacing8
+                            }
+                        }
+                    }
+
+                    // ── Moteur de détection vocale (VAD backend) ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing4
+
+                        FieldLabel { text: SettingsLabels.t("vad.engine") }
+
+                        ComboBox {
+                            id: vadBackendCombo
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            model: ["builtin", "silero", "hybrid"]
+
+                            Component.onCompleted: {
+                                var val = typeof configManager !== 'undefined'
+                                          ? configManager.getVADBackend() : "builtin"
+                                currentIndex = model.indexOf(val)
+                                if (currentIndex < 0) currentIndex = 0
+                            }
+
+                            onActivated: {
+                                if (typeof configManager !== 'undefined')
+                                    configManager.setUserValue("VAD", "backend", currentText)
+                            }
+
+                            background: Rectangle {
+                                radius: Theme.radiusSmall
+                                color: Theme.bgInput
+                                border.color: vadBackendCombo.activeFocus ? Theme.borderFocus : "transparent"
+                            }
+                            contentItem: Text {
+                                leftPadding: Theme.spacing8
+                                text: vadBackendCombo.displayText
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSmall
+                                color: Theme.textPrimary
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+
+                    // ── Seuil VAD ──
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing4
 
                         RowLayout {
                             Layout.fillWidth: true
-                            Text {
-                                text: "vad.threshold"
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontCaption
-                                color: Theme.textSecondary
-                            }
+                            FieldLabel { text: SettingsLabels.t("vad.threshold") }
                             Item { Layout.fillWidth: true }
                             Text {
                                 text: vadSlider.value.toFixed(2)
@@ -803,19 +453,14 @@ Rectangle {
                         }
                     }
 
-                    // Noise Gate slider
+                    // ── Porte de bruit (noise gate) ──
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing4
 
                         RowLayout {
                             Layout.fillWidth: true
-                            Text {
-                                text: "noise.gate"
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontCaption
-                                color: Theme.textSecondary
-                            }
+                            FieldLabel { text: SettingsLabels.t("noise.gate") }
                             Item { Layout.fillWidth: true }
                             Text {
                                 text: noiseSlider.value.toFixed(3)
@@ -877,18 +522,12 @@ Rectangle {
                         }
                     }
 
-                    // AGC toggle
+                    // ── Contrôle automatique du gain (AGC) ──
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing8
 
-                        Text {
-                            text: "agc.enabled"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
-
+                        FieldLabel { text: SettingsLabels.t("agc.enabled") }
                         Item { Layout.fillWidth: true }
 
                         Switch {
@@ -927,39 +566,337 @@ Rectangle {
                             }
                         }
                     }
+
+                    // ── Réduction de bruit (DSP) ──
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing8
+
+                        FieldLabel { text: SettingsLabels.t("dsp.noiseReduction") }
+                        Item { Layout.fillWidth: true }
+
+                        Switch {
+                            id: noiseReductionToggle
+                            checked: typeof configManager !== 'undefined' ? configManager.getBool("DSP", "noise_reduction_enabled", true) : true
+                            onToggled: {
+                                if (typeof configManager !== 'undefined')
+                                    configManager.setUserValue("DSP", "noise_reduction_enabled",
+                                                               checked ? "true" : "false")
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing4
+                        visible: noiseReductionToggle.checked
+
+                        FieldLabel {
+                            text: "Intensité de réduction de bruit : " + dspNoiseSlider.value.toFixed(2)
+                        }
+
+                        Slider {
+                            id: dspNoiseSlider
+                            Layout.fillWidth: true
+                            from: 0.0
+                            to: 1.0
+                            value: 0.7
+                            stepSize: 0.05
+                            Component.onCompleted: {
+                                if (typeof configManager !== 'undefined') {
+                                    var v = parseFloat(configManager.getString("DSP", "noise_reduction_strength", "0.70"))
+                                    if (!isNaN(v)) value = v
+                                }
+                            }
+                            onMoved: {
+                                if (typeof configManager !== 'undefined')
+                                    configManager.setUserValue("DSP", "noise_reduction_strength",
+                                                               value.toFixed(2))
+                            }
+                        }
+                    }
                 }
 
-                // Séparateur
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.border
-                }
+                SectionSeparator {}
 
-                // ── Section : TTS Voice (Orpheus 3B FR) ──
+                // ═══════════════════════════════════════════════════
+                //  2 ── RECONNAISSANCE VOCALE (STT)
+                // ═══════════════════════════════════════════════════
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing8
 
-                    Text {
-                        text: "TTS Engine"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
+                    SectionTitle { text: "2. Reconnaissance vocale (STT)" }
 
-                    // ── TTS Engine selector ──
+                    // ── Langue de reconnaissance vocale ──
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing4
 
+                        FieldLabel { text: SettingsLabels.t("stt.language") }
+
+                        ComboBox {
+                            id: langCombo
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            model: ListModel {
+                                ListElement { text: "Français"; value: "fr" }
+                                ListElement { text: "English"; value: "en" }
+                                ListElement { text: "Español"; value: "es" }
+                                ListElement { text: "Deutsch"; value: "de" }
+                                ListElement { text: "Italiano"; value: "it" }
+                                ListElement { text: "Português"; value: "pt" }
+                                ListElement { text: "日本語"; value: "ja" }
+                                ListElement { text: "中文"; value: "zh" }
+                            }
+                            textRole: "text"
+                            valueRole: "value"
+
+                            Component.onCompleted: {
+                                var lang = typeof configManager !== 'undefined'
+                                           ? configManager.getSTTLanguage() : "fr"
+                                for (var i = 0; i < model.count; i++) {
+                                    if (model.get(i).value === lang) {
+                                        currentIndex = i
+                                        break
+                                    }
+                                }
+                            }
+
+                            onActivated: {
+                                var val = model.get(currentIndex).value
+                                if (typeof configManager !== 'undefined')
+                                    configManager.setUserValue("STT", "language", val)
+                                if (typeof voiceManager !== 'undefined')
+                                    voiceManager.setSTTLanguage(val)
+                            }
+
+                            background: Rectangle {
+                                radius: Theme.radiusSmall
+                                color: Theme.bgInput
+                                border.color: langCombo.activeFocus ? Theme.borderFocus : "transparent"
+                            }
+
+                            contentItem: Text {
+                                leftPadding: Theme.spacing8
+                                text: langCombo.displayText
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSmall
+                                color: Theme.textPrimary
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            delegate: ItemDelegate {
+                                width: langCombo.width
+                                contentItem: Text {
+                                    text: model.text
+                                    font.family: Theme.fontMono
+                                    font.pixelSize: Theme.fontSmall
+                                    color: Theme.textPrimary
+                                }
+                                background: Rectangle {
+                                    color: highlighted ? Theme.accentActive : Theme.bgSecondary
+                                }
+                            }
+
+                            popup: Popup {
+                                y: langCombo.height
+                                width: langCombo.width
+                                implicitHeight: contentItem.implicitHeight
+                                padding: 1
+
+                                contentItem: ListView {
+                                    clip: true
+                                    implicitHeight: contentHeight
+                                    model: langCombo.popup.visible ? langCombo.delegateModel : null
+                                    currentIndex: langCombo.highlightedIndex
+                                }
+
+                                background: Rectangle {
+                                    color: Theme.bgSecondary
+                                    border.color: Theme.border
+                                    radius: Theme.radiusSmall
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Mot-clé d'activation (wake word texte) ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing4
+
+                        FieldLabel { text: SettingsLabels.t("assistant.wakeWord") }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 30
+                            radius: Theme.radiusSmall
+                            color: Theme.bgInput
+                            border.color: wakeInput.activeFocus ? Theme.borderFocus : "transparent"
+
+                            Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
+
+                            TextInput {
+                                id: wakeInput
+                                anchors.fill: parent
+                                anchors.leftMargin: Theme.spacing8
+                                anchors.rightMargin: Theme.spacing8
+                                verticalAlignment: TextInput.AlignVCenter
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSmall
+                                color: Theme.textPrimary
+                                selectByMouse: true
+                                selectionColor: Theme.accentActive
+                                text: typeof configManager !== 'undefined'
+                                      ? configManager.getWakeWord() : "EXO"
+
+                                onAccepted: {
+                                    if (typeof configManager !== 'undefined')
+                                        configManager.setWakeWord(text)
+                                    if (typeof voiceManager !== 'undefined')
+                                        voiceManager.setWakeWord(text)
+                                }
+                                onActiveFocusChanged: {
+                                    if (!activeFocus && typeof configManager !== 'undefined') {
+                                        configManager.setWakeWord(text)
+                                        if (typeof voiceManager !== 'undefined')
+                                            voiceManager.setWakeWord(text)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Détection neuronale du mot-clé ──
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing8
+
+                        FieldLabel { text: SettingsLabels.t("wakeword.neural") }
+                        Item { Layout.fillWidth: true }
+
+                        Switch {
+                            id: neuralWakewordToggle
+                            checked: typeof configManager !== 'undefined'
+                                     ? configManager.getBool("WakeWord", "neural_enabled", false) : false
+                            onToggled: {
+                                if (typeof configManager !== 'undefined')
+                                    configManager.setUserValue("WakeWord", "neural_enabled",
+                                                               checked ? "true" : "false")
+                            }
+                        }
+                    }
+                }
+
+                SectionSeparator {}
+
+                // ═══════════════════════════════════════════════════
+                //  3 ── ORCHESTRATEUR & MÉMOIRE
+                // ═══════════════════════════════════════════════════
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing8
+
+                    SectionTitle { text: "3. Orchestrateur & Mémoire" }
+
+                    Row {
+                        spacing: Theme.spacing16
+
                         Text {
-                            text: "tts.engine"
+                            text: typeof memoryManager !== 'undefined'
+                                  ? "Conversations enregistrées : " + memoryManager.conversationCount
+                                  : "Conversations enregistrées : 0"
                             font.family: Theme.fontMono
                             font.pixelSize: Theme.fontCaption
                             color: Theme.textSecondary
                         }
+
+                        Text {
+                            text: typeof memoryManager !== 'undefined'
+                                  ? "Souvenirs persistants : " + memoryManager.memoryCount
+                                  : "Souvenirs persistants : 0"
+                            font.family: Theme.fontMono
+                            font.pixelSize: Theme.fontCaption
+                            color: Theme.textSecondary
+                        }
+                    }
+
+                    // ── Mémoire sémantique (FAISS) ──
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing8
+
+                        FieldLabel { text: SettingsLabels.t("memory.semantic") }
+                        Item { Layout.fillWidth: true }
+
+                        Switch {
+                            id: semanticToggle
+                            checked: typeof configManager !== 'undefined'
+                                     ? configManager.getBool("Memory", "semantic_enabled", true) : true
+                            onToggled: {
+                                if (typeof configManager !== 'undefined')
+                                    configManager.setUserValue("Memory", "semantic_enabled",
+                                                               checked ? "true" : "false")
+                            }
+                        }
+                    }
+                }
+
+                SectionSeparator {}
+
+                // ═══════════════════════════════════════════════════
+                //  4 ── MODÈLE LLM
+                // ═══════════════════════════════════════════════════
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing8
+
+                    SectionTitle { text: "4. Modèle LLM (Claude)" }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing4
+
+                        FieldLabel { text: SettingsLabels.t("claude.model") }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 30
+                            radius: Theme.radiusSmall
+                            color: Theme.bgInput
+
+                            Text {
+                                anchors.fill: parent
+                                anchors.leftMargin: Theme.spacing8
+                                verticalAlignment: Text.AlignVCenter
+                                font.family: Theme.fontMono
+                                font.pixelSize: Theme.fontSmall
+                                color: Theme.warning
+                                text: typeof configManager !== 'undefined'
+                                      ? configManager.getClaudeModel() : "claude-3-haiku"
+                            }
+                        }
+                    }
+                }
+
+                SectionSeparator {}
+
+                // ═══════════════════════════════════════════════════
+                //  5 ── SYNTHÈSE VOCALE (TTS)
+                // ═══════════════════════════════════════════════════
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing8
+
+                    SectionTitle { text: "5. Synthèse vocale (TTS)" }
+
+                    // ── Moteur de synthèse vocale ──
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing4
+
+                        FieldLabel { text: SettingsLabels.t("tts.engine") }
 
                         ComboBox {
                             id: engineCombo
@@ -967,14 +904,14 @@ Rectangle {
                             Layout.preferredHeight: 30
                             model: ListModel {
                                 ListElement { text: "Orpheus 3B FR (CUDA)"; value: "orpheus_cuda" }
-                                ListElement { text: "Qt TTS (fallback)";   value: "qt_fallback" }
+                                ListElement { text: "Qt TTS (secours)";    value: "qt_fallback" }
                             }
                             textRole: "text"
                             valueRole: "value"
 
-                            // Synchronise le combo avec le moteur reellement actif cote serveur
+                            // Synchronise le combo avec le moteur réellement actif côté serveur
                             // via /health (engine = "orpheus-gguf").
-                            // Lance au demarrage et apres chaque changement.
+                            // Lancé au démarrage et après chaque changement.
                             function syncFromServer() {
                                 var xhr = new XMLHttpRequest()
                                 xhr.timeout = 1500
@@ -1003,7 +940,7 @@ Rectangle {
                             Component.onCompleted: {
                                 var engine = typeof configManager !== 'undefined'
                                              ? configManager.getTTSEngine() : "orpheus_cuda"
-                                // Migration auto : valeurs heritees -> Orpheus
+                                // Migration auto : valeurs héritées -> Orpheus
                                 if (engine.indexOf("cosy") === 0) {
                                     engine = "orpheus_cuda"
                                     if (typeof configManager !== 'undefined')
@@ -1077,16 +1014,12 @@ Rectangle {
                         }
                     }
 
+                    // ── Voix ──
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing4
 
-                        Text {
-                            text: "tts.voice"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
+                        FieldLabel { text: SettingsLabels.t("tts.voice") }
 
                         ComboBox {
                             id: voiceCombo
@@ -1177,7 +1110,7 @@ Rectangle {
                         }
                     }
 
-                    // ── Pitch + Rate sliders (side by side) ──
+                    // ── Tonalité + Vitesse de parole (côte à côte) ──
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing8
@@ -1188,12 +1121,7 @@ Rectangle {
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                Text {
-                                    text: "tts.pitch"
-                                    font.family: Theme.fontMono
-                                    font.pixelSize: Theme.fontCaption
-                                    color: Theme.textSecondary
-                                }
+                                FieldLabel { text: SettingsLabels.t("tts.pitch") }
                                 Item { Layout.fillWidth: true }
                                 Text {
                                     id: pitchValueText
@@ -1259,12 +1187,7 @@ Rectangle {
 
                             RowLayout {
                                 Layout.fillWidth: true
-                                Text {
-                                    text: "tts.rate"
-                                    font.family: Theme.fontMono
-                                    font.pixelSize: Theme.fontCaption
-                                    color: Theme.textSecondary
-                                }
+                                FieldLabel { text: SettingsLabels.t("tts.rate") }
                                 Item { Layout.fillWidth: true }
                                 Text {
                                     id: rateValueText
@@ -1325,7 +1248,7 @@ Rectangle {
                         }
                     }
 
-                    // ── Style + Language (side by side) ──
+                    // ── Style vocal + Langue de synthèse (côte à côte) ──
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing8
@@ -1334,12 +1257,7 @@ Rectangle {
                             Layout.fillWidth: true
                             spacing: Theme.spacing4
 
-                            Text {
-                                text: "tts.style"
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontCaption
-                                color: Theme.textSecondary
-                            }
+                            FieldLabel { text: SettingsLabels.t("tts.style") }
 
                             ComboBox {
                                 id: styleCombo
@@ -1417,12 +1335,7 @@ Rectangle {
                             Layout.fillWidth: true
                             spacing: Theme.spacing4
 
-                            Text {
-                                text: "tts.language"
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontCaption
-                                color: Theme.textSecondary
-                            }
+                            FieldLabel { text: SettingsLabels.t("tts.language") }
 
                             ComboBox {
                                 id: ttsLangCombo
@@ -1520,17 +1433,12 @@ Rectangle {
                         }
                     }
 
-                    // ── Test phrase + Parler button ──
+                    // ── Phrase de test + bouton Parler ──
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing4
 
-                        Text {
-                            text: "tts.testPhrase"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
+                        FieldLabel { text: SettingsLabels.t("tts.testPhrase") }
 
                         RowLayout {
                             Layout.fillWidth: true
@@ -1547,7 +1455,7 @@ Rectangle {
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.fontSmall
                                 color: Theme.textPrimary
-                                placeholderText: "Entrez une phrase à tester…"
+                                placeholderText: SettingsLabels.t("tts.testPlaceholder")
                                 placeholderTextColor: Theme.textMuted
                                 background: Rectangle {
                                     radius: Theme.radiusSmall
@@ -1579,7 +1487,7 @@ Rectangle {
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                     Text {
-                                        text: "Parler"
+                                        text: SettingsLabels.t("tts.speak")
                                         font.family: Theme.fontMono
                                         font.pixelSize: Theme.fontCaption
                                         font.bold: true
@@ -1608,259 +1516,171 @@ Rectangle {
                     }
                 }
 
-                // ── Section : Memory ──
+                SectionSeparator {}
+
+                // ═══════════════════════════════════════════════════
+                //  6 ── INTERFACE & AFFICHAGE
+                // ═══════════════════════════════════════════════════
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: Theme.spacing8
+                    spacing: Theme.spacing12
+
+                    SectionTitle { text: "6. Interface & Affichage" }
 
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 1
-                        color: Theme.border
-                    }
+                        height: 50
+                        color: Theme.bgSecondary
+                        border.color: Theme.border
+                        border.width: 1
+                        radius: Theme.radiusSmall
 
-                    Text {
-                        text: "Memory"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacing12
+                            anchors.rightMargin: Theme.spacing12
+                            spacing: Theme.spacing12
 
-                    Row {
-                        spacing: Theme.spacing16
+                            ColumnLayout {
+                                spacing: 2
+                                Layout.fillWidth: true
 
-                        Text {
-                            text: typeof memoryManager !== 'undefined'
-                                  ? "Conversations: " + memoryManager.conversationCount
-                                  : "Conversations: 0"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
+                                Text {
+                                    text: SettingsLabels.t("dev.expertMode")
+                                    font.family: Theme.fontMono
+                                    font.pixelSize: Theme.fontSmall
+                                    color: Theme.textPrimary
+                                    font.bold: true
+                                }
 
-                        Text {
-                            text: typeof memoryManager !== 'undefined'
-                                  ? "Souvenirs: " + memoryManager.memoryCount
-                                  : "Souvenirs: 0"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
-                    }
-
-                    // Semantic memory toggle
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing8
-
-                        Text {
-                            text: "Mémoire sémantique (FAISS)"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
-
-                        Switch {
-                            id: semanticToggle
-                            checked: typeof configManager !== 'undefined'
-                                     ? configManager.getBool("Memory", "semantic_enabled", true) : true
-                            onToggled: {
-                                if (typeof configManager !== 'undefined')
-                                    configManager.setUserValue("Memory", "semantic_enabled",
-                                                               checked ? "true" : "false")
-                            }
-                        }
-                    }
-                }
-
-                // Séparateur
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.border
-                }
-
-                // ── Section : VAD & DSP ──
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing8
-
-                    Text {
-                        text: "VAD & DSP"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
-
-                    // VAD Backend selector
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing4
-
-                        Text {
-                            text: "vad.backend"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
-
-                        ComboBox {
-                            id: vadBackendCombo
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 30
-                            model: ["builtin", "silero", "hybrid"]
-
-                            Component.onCompleted: {
-                                var val = typeof configManager !== 'undefined'
-                                          ? configManager.getVADBackend() : "builtin"
-                                currentIndex = model.indexOf(val)
-                                if (currentIndex < 0) currentIndex = 0
-                            }
-
-                            onActivated: {
-                                if (typeof configManager !== 'undefined')
-                                    configManager.setUserValue("VAD", "backend", currentText)
-                            }
-
-                            background: Rectangle {
-                                radius: Theme.radiusSmall
-                                color: Theme.bgInput
-                                border.color: vadBackendCombo.activeFocus ? Theme.borderFocus : "transparent"
-                            }
-                            contentItem: Text {
-                                leftPadding: Theme.spacing8
-                                text: vadBackendCombo.displayText
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontSmall
-                                color: Theme.textPrimary
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-                    }
-
-                    // Noise reduction toggle + slider
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing8
-
-                        Text {
-                            text: "Réduction de bruit DSP"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
-
-                        Switch {
-                            id: noiseReductionToggle
-                            checked: typeof configManager !== 'undefined' ? configManager.getBool("DSP", "noise_reduction_enabled", true) : true
-                            onToggled: {
-                                if (typeof configManager !== 'undefined')
-                                    configManager.setUserValue("DSP", "noise_reduction_enabled",
-                                                               checked ? "true" : "false")
-                            }
-                        }
-                    }
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing4
-                        visible: noiseReductionToggle.checked
-
-                        Text {
-                            text: "dsp.noiseReductionStrength: " + dspNoiseSlider.value.toFixed(2)
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
-
-                        Slider {
-                            id: dspNoiseSlider
-                            Layout.fillWidth: true
-                            from: 0.0
-                            to: 1.0
-                            value: 0.7
-                            stepSize: 0.05
-                            Component.onCompleted: {
-                                if (typeof configManager !== 'undefined') {
-                                    var v = parseFloat(configManager.getString("DSP", "noise_reduction_strength", "0.70"))
-                                    if (!isNaN(v)) value = v
+                                Text {
+                                    text: SettingsLabels.t("dev.expertModeDescription")
+                                    font.family: Theme.fontMono
+                                    font.pixelSize: Theme.fontCaption
+                                    color: Theme.textSecondary
                                 }
                             }
-                            onMoved: {
-                                if (typeof configManager !== 'undefined')
-                                    configManager.setUserValue("DSP", "noise_reduction_strength",
-                                                               value.toFixed(2))
+
+                            Switch {
+                                id: expertModeToggle
+                                checked: typeof UIState !== 'undefined' ? UIState.expertMode : false
+                                onCheckedChanged: {
+                                    if (typeof UIState !== 'undefined') {
+                                        UIState.setExpertMode(checked)
+                                        if (typeof MenuStructure !== 'undefined') {
+                                            MenuStructure.refreshMenu()
+                                        }
+                                        console.log("[Settings] Mode Expert basculé à:", checked)
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                // Séparateur
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.border
-                }
+                SectionSeparator {}
 
-                // ── Section : WakeWord ──
+                // ═══════════════════════════════════════════════════
+                //  7 ── SERVICES EXTERNES (Météo, API)
+                // ═══════════════════════════════════════════════════
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing8
 
-                    Text {
-                        text: "Wake Word"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
+                    SectionTitle { text: "7. Services externes (Météo, API)" }
 
-                    RowLayout {
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: Theme.spacing8
+                        spacing: Theme.spacing4
 
-                        Text {
-                            text: "Détection neuronale (OpenWakeWord)"
-                            font.family: Theme.fontMono
-                            font.pixelSize: Theme.fontCaption
-                            color: Theme.textSecondary
-                        }
+                        FieldLabel { text: SettingsLabels.t("weather.city") }
 
-                        Switch {
-                            id: neuralWakewordToggle
-                            checked: typeof configManager !== 'undefined'
-                                     ? configManager.getBool("WakeWord", "neural_enabled", false) : false
-                            onToggled: {
-                                if (typeof configManager !== 'undefined')
-                                    configManager.setUserValue("WakeWord", "neural_enabled",
-                                                               checked ? "true" : "false")
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing8
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 30
+                                radius: Theme.radiusSmall
+                                color: Theme.bgInput
+                                border.color: cityInput.activeFocus ? Theme.borderFocus : "transparent"
+
+                                Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
+
+                                TextInput {
+                                    id: cityInput
+                                    anchors.fill: parent
+                                    anchors.leftMargin: Theme.spacing8
+                                    anchors.rightMargin: Theme.spacing8
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    font.family: Theme.fontMono
+                                    font.pixelSize: Theme.fontSmall
+                                    color: Theme.textPrimary
+                                    selectByMouse: true
+                                    selectionColor: Theme.accentActive
+                                    text: typeof configManager !== 'undefined'
+                                          ? configManager.getWeatherCity() : "Paris"
+
+                                    Keys.onReturnPressed: {
+                                        if (typeof configManager !== 'undefined')
+                                            configManager.setWeatherCity(cityInput.text)
+                                        if (typeof weatherManager !== 'undefined')
+                                            weatherManager.setCity(cityInput.text)
+                                    }
+                                    onActiveFocusChanged: {
+                                        if (!activeFocus && typeof configManager !== 'undefined') {
+                                            configManager.setWeatherCity(cityInput.text)
+                                            if (typeof weatherManager !== 'undefined')
+                                                weatherManager.setCity(cityInput.text)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: 90
+                                height: 30
+                                radius: Theme.radiusSmall
+                                color: detectArea.containsMouse ? Theme.accentHover : Theme.accent
+
+                                Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: SettingsLabels.t("common.detect")
+                                    font.family: Theme.fontMono
+                                    font.pixelSize: Theme.fontMicro
+                                    color: "#FFFFFF"
+                                }
+
+                                MouseArea {
+                                    id: detectArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (typeof configManager !== 'undefined')
+                                            configManager.detectLocation()
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                // Séparateur
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.border
-                }
+                SectionSeparator {}
 
-                // ── Section : Stability Tests ──
+                // ═══════════════════════════════════════════════════
+                //  8 ── DIAGNOSTICS & TESTS
+                // ═══════════════════════════════════════════════════
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Theme.spacing8
 
-                    Text {
-                        text: "Diagnostics"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
+                    SectionTitle { text: "8. Diagnostics & Tests" }
 
+                    // ── Accès aux tests de stabilité ──
                     Rectangle {
                         Layout.fillWidth: true
                         height: Theme.buttonHeight
@@ -1873,7 +1693,7 @@ Rectangle {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "Ouvrir Stability Tests"
+                            text: SettingsLabels.t("diag.stability")
                             font.family: Theme.fontMono
                             font.pixelSize: Theme.fontSmall
                             font.weight: Font.Medium
@@ -1890,103 +1710,91 @@ Rectangle {
                                 var mw = root
                                 while (mw && !mw.hasOwnProperty("navigateTo"))
                                     mw = mw.parent
-                                // fallback: directly set centralStack
+                                // Repli : positionner directement le centralStack
                                 if (typeof centralStack !== 'undefined')
                                     centralStack.currentIndex = 17
                             }
                         }
                     }
-                }
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    height: 1
-                    color: Theme.border
-                }
-
-                // ── Section : Chat ──
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing8
-
-                    Text {
-                        text: "Chat"
-                        font.family: Theme.fontMono
-                        font.pixelSize: Theme.fontSmall
-                        font.bold: true
-                        color: Theme.textPrimary
-                    }
-
-                    RowLayout {
+                    // ── Test conversationnel rapide ──
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: Theme.spacing8
+                        spacing: Theme.spacing4
 
-                        Rectangle {
+                        FieldLabel { text: "Test conversationnel (envoyer un message à EXO)" }
+
+                        RowLayout {
                             Layout.fillWidth: true
-                            height: Theme.buttonHeight
-                            radius: Theme.radiusSmall
-                            color: Theme.bgInput
-                            border.color: chatInput.activeFocus ? Theme.borderFocus : "transparent"
+                            spacing: Theme.spacing8
 
-                            Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: Theme.buttonHeight
+                                radius: Theme.radiusSmall
+                                color: Theme.bgInput
+                                border.color: chatInput.activeFocus ? Theme.borderFocus : "transparent"
 
-                            TextInput {
-                                id: chatInput
-                                anchors.fill: parent
-                                anchors.leftMargin: Theme.spacing8
-                                anchors.rightMargin: Theme.spacing8
-                                verticalAlignment: TextInput.AlignVCenter
-                                font.family: Theme.fontMono
-                                font.pixelSize: Theme.fontSmall
-                                color: Theme.textPrimary
-                                clip: true
-                                selectByMouse: true
-                                selectionColor: Theme.accentActive
+                                Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
 
-                                property string placeholderText: "Tapez un message..."
-                                Text {
+                                TextInput {
+                                    id: chatInput
                                     anchors.fill: parent
-                                    verticalAlignment: Text.AlignVCenter
-                                    font: chatInput.font
-                                    color: Theme.textMuted
-                                    text: chatInput.placeholderText
-                                    visible: !chatInput.text && !chatInput.activeFocus
+                                    anchors.leftMargin: Theme.spacing8
+                                    anchors.rightMargin: Theme.spacing8
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    font.family: Theme.fontMono
+                                    font.pixelSize: Theme.fontSmall
+                                    color: Theme.textPrimary
+                                    clip: true
+                                    selectByMouse: true
+                                    selectionColor: Theme.accentActive
+
+                                    property string placeholderText: "Tapez un message…"
+                                    Text {
+                                        anchors.fill: parent
+                                        verticalAlignment: Text.AlignVCenter
+                                        font: chatInput.font
+                                        color: Theme.textMuted
+                                        text: chatInput.placeholderText
+                                        visible: !chatInput.text && !chatInput.activeFocus
+                                    }
+
+                                    Keys.onReturnPressed: sendChatBtn.clicked()
+                                    Keys.onEnterPressed: sendChatBtn.clicked()
+                                }
+                            }
+
+                            Rectangle {
+                                id: sendChatBtn
+                                Layout.preferredWidth: Theme.buttonHeight
+                                Layout.preferredHeight: Theme.buttonHeight
+                                radius: Theme.radiusSmall
+                                color: sendChatMa.containsPress ? Theme.accentDark : Theme.accent
+
+                                Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+                                signal clicked()
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▶"
+                                    font.pixelSize: Theme.fontBody
+                                    color: "#FFFFFF"
                                 }
 
-                                Keys.onReturnPressed: sendChatBtn.clicked()
-                                Keys.onEnterPressed: sendChatBtn.clicked()
-                            }
-                        }
-
-                        Rectangle {
-                            id: sendChatBtn
-                            width: Theme.buttonHeight
-                            height: Theme.buttonHeight
-                            radius: Theme.radiusSmall
-                            color: sendChatMa.containsPress ? Theme.accentDark : Theme.accent
-
-                            Behavior on color { ColorAnimation { duration: Theme.animFast } }
-
-                            signal clicked()
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "▶"
-                                font.pixelSize: Theme.fontBody
-                                color: "#FFFFFF"
-                            }
-
-                            MouseArea {
-                                id: sendChatMa
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    parent.clicked()
-                                    var msg = chatInput.text.trim()
-                                    if (msg.length > 0 && typeof assistantManager !== 'undefined') {
-                                        assistantManager.sendMessage(msg)
-                                        chatInput.text = ""
+                                MouseArea {
+                                    id: sendChatMa
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        parent.clicked()
+                                        var msg = chatInput.text.trim()
+                                        if (msg.length > 0 && typeof assistantManager !== 'undefined') {
+                                            assistantManager.sendMessage(msg)
+                                            chatInput.text = ""
+                                        }
                                     }
                                 }
                             }

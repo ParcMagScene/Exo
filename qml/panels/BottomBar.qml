@@ -23,22 +23,36 @@ Rectangle {
     function refreshServiceStates() {
         // Clés en minuscules : ServiceDescriptor::fromJson force toLower()
         // sur les noms chargés depuis services.json (registry indexe en lowercase).
+        // v9.1 — Sync GUI : on n'affiche QUE les services qui ont une source d'état
+        //  réelle (registry Supervisor OU probe HealthCheck). Les 9 services
+        //  phantoms (files/calendar/homegraph/domotic/camera/samsung/voltalis/
+        //  echo/networkmap) ne sont pas dans services.json ni dans HealthCheck,
+        //  ils restaient donc forcément en "disabled" (gris). Cohérence avec
+        //  AssistantToolDispatcher (abandon après 5 tentatives, patch C).
+        //  Pour les réactiver : déclarer le service dans config/services.json
+        //  ET ajouter setupService(...) dans HealthCheck::configure().
         var keys = ["stt","tts","vad","wakeword","memory","nlu","context","planner",
-                    "executor","verifier","fileservice","calendar","system","homegraph",
-                    "domotic","camera","samsung","voltalis","echo","networkmap"]
+                    "executor","verifier","system",
+                    "websearch","news","knowledge","tools"]
         var s = {}
         var hasSup = (typeof serviceSupervisor !== 'undefined')
         var hasHealth = (typeof healthCheck !== 'undefined')
         for (var i = 0; i < keys.length; ++i) {
             var k = keys[i]
-            // Priorité au statut runtime ping/pong (HealthCheck), sinon état boot Supervisor
-            var v = ""
+            // Priorité au statut runtime ping/pong (HealthCheck), sinon état boot Supervisor.
+            // Toute valeur brute (healthy/degraded/down/ready/starting/failed/unknown/…)
+            // est ensuite normalisée en 4 états canoniques : ready/starting/error/disabled.
+            // Service absent du registry ET non probé par HealthCheck → "disabled" (gris).
+            var raw = ""
             if (hasHealth) {
                 var h = healthCheck.serviceStatus(k)
-                if (h && h !== "unknown") v = h
+                if (h && h !== "unknown") raw = h
             }
-            if (!v && hasSup) v = serviceSupervisor.serviceState(k)
-            s[k] = v || ""
+            if (!raw && hasSup) {
+                var sup = serviceSupervisor.serviceState(k)
+                if (sup && sup !== "unknown") raw = sup
+            }
+            s[k] = Theme.normalizeServiceState(raw)
         }
         bottomBar.serviceStates = s
     }
@@ -80,6 +94,10 @@ Rectangle {
             spacing: Theme.spacing6
 
             Repeater {
+                // v9.1 — Sync stricte : 15 dots = 11 services réels du Supervisor
+                //  (services.json) + 4 microservices outils probés par HealthCheck
+                //  (websearch/news/knowledge/tools). Garantie : si splash vert,
+                //  alors tous les dots verts.
                 model: [
                     { label: "STT", key: "stt" },
                     { label: "TTS", key: "tts" },
@@ -91,16 +109,11 @@ Rectangle {
                     { label: "PLN", key: "planner" },
                     { label: "EXE", key: "executor" },
                     { label: "VER", key: "verifier" },
-                    { label: "FIL", key: "fileservice" },
-                    { label: "CAL", key: "calendar" },
                     { label: "SYS", key: "system" },
-                    { label: "HG",  key: "homegraph" },
-                    { label: "DOM", key: "domotic" },
-                    { label: "CAM", key: "camera" },
-                    { label: "SAM", key: "samsung" },
-                    { label: "VOL", key: "voltalis" },
-                    { label: "ECH", key: "echo" },
-                    { label: "NET", key: "networkmap" }
+                    { label: "WEB", key: "websearch" },
+                    { label: "NWS", key: "news" },
+                    { label: "KNW", key: "knowledge" },
+                    { label: "TLS", key: "tools" }
                 ]
 
                 Row {

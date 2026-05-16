@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 
 # Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
@@ -197,7 +197,7 @@ class TaskVerifier:
                 issues.append({
                     "type": "no_search_results",
                     "severity": "medium",
-                    "message": "Web search returned no results",
+                    "message": "La recherche web n'a retourné aucun résultat",
                 })
 
         elif tool == "get_news":
@@ -206,7 +206,7 @@ class TaskVerifier:
                 issues.append({
                     "type": "no_news",
                     "severity": "low",
-                    "message": "No news articles found",
+                    "message": "Aucun article d'actualité trouvé",
                 })
 
         elif tool == "calculate":
@@ -214,7 +214,7 @@ class TaskVerifier:
                 issues.append({
                     "type": "no_calculation_result",
                     "severity": "high",
-                    "message": "Calculation returned no result value",
+                    "message": "Le calcul n'a retourné aucune valeur",
                 })
 
         elif tool == "recall_info":
@@ -223,7 +223,7 @@ class TaskVerifier:
                 issues.append({
                     "type": "no_memories",
                     "severity": "low",
-                    "message": "No relevant memories found",
+                    "message": "Aucun souvenir pertinent trouvé",
                 })
 
         return issues

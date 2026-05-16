@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
         qInfo() << "[GPU] GUI: AMD (OK)";
         qInfo() << "[GPU] STT: Vulkan → RTX 3070 (delegated to stt_server.py)";
         qInfo() << "[GPU] TTS: CUDA → RTX 3070 (delegated to tts_server.py)";
-        qInfo() << "[GPU] Multi-GPU configuration: ACTIVE";
+        qInfo() << "[GPU] Configuration multi-GPU : ACTIVE";
     }
 
     // Initialize LogManager with file logging ENABLED for crash diagnostics
@@ -323,7 +323,7 @@ int main(int argc, char *argv[])
     
     // Initialiser l'assistant quand tous les services sont prêts
     QObject::connect(&serviceSupervisor, &ServiceSupervisor::allServicesReady, [&]() {
-        qInfo() << "[GUI] All services ready → initializing assistant";
+        qInfo() << "[GUI] Tous les services prêts → initialisation de l'assistant";
         assistantManager.initializeWithConfig();
         assistantManager.setSafeBootDecisionMade(true);
         // Configure TestController with the same ConfigManager
@@ -332,7 +332,7 @@ int main(int argc, char *argv[])
 
     // Safe Boot: initialiser aussi quand seuls les services critiques sont prêts
     QObject::connect(&safeBootController, &SafeBootController::criticalServicesReady, [&]() {
-        qInfo() << "[SAFEBOOT] Critical services ready → initializing assistant";
+        qInfo() << "[SAFEBOOT] Services critiques prêts → initialisation de l'assistant";
         assistantManager.initializeWithConfig();
         assistantManager.setSafeBootDecisionMade(true);
         testController.configure(assistantManager.configManager());

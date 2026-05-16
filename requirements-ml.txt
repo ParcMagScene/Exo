@@ -8,9 +8,9 @@ faster-whisper>=1.0
 # TTS : Orpheus 3B FR GGUF Q8 (services/orpheus/server_ws.py)
 # Le serveur Orpheus utilise sa propre venv : services/orpheus/venv/
 # (llama-cpp-python CUDA + snac). Aucune dependance TTS dans cette requirements.
-hyperpyyaml>=1.2
-conformer
-modelscope
+# Note 2026-05-16 : `hyperpyyaml`, `conformer`, `modelscope` (restes CosyVoice)
+# supprimes apres audit -- 0 import detecte dans python/ et services/.
+
 # PyTorch CUDA — install via: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
 torch>=2.4,<2.5
 torchaudio>=2.4,<2.5

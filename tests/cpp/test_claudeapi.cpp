@@ -22,7 +22,6 @@ private slots:
     void setApiKey_emitsReadyChanged();
     void setApiKey_empty_notReady();
     void setModel_emitsModelChanged();
-    void setTemperature_clampsToRange();
     void setMaxTokens_clampsToRange();
     void setTopP_validation();
     void setTopK_validation();
@@ -98,18 +97,8 @@ void TestClaudeAPI::setModel_emitsModelChanged()
     QCOMPARE(api.model(), QStringLiteral("claude-3-5-sonnet-20241022"));
 }
 
-void TestClaudeAPI::setTemperature_clampsToRange()
-{
-    ClaudeAPI api;
-
-    // Setters should not crash with boundary values
-    api.setTemperature(0.5);
-    api.setTemperature(-1.0);  // below min → clamped
-    api.setTemperature(5.0);   // above max → clamped
-    api.setTemperature(0.0);
-    api.setTemperature(1.0);
-    // No crash = pass (no public getter to verify stored value)
-}
+// LLM LOCK 2026-05-16 : test setTemperature_clampsToRange supprimé — méthode
+// retirée de l'API publique (claude-opus-4.7 n'accepte pas `temperature`).
 
 void TestClaudeAPI::setMaxTokens_clampsToRange()
 {

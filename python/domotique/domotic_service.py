@@ -211,7 +211,7 @@ class DomoticService:
         domain = eid.split(".")[0] if "." in eid else ""
 
         if not self.has_ha:
-            return {"ok": False, "error": "Home Assistant not configured"}
+            return {"ok": False, "error": "Home Assistant non configuré"}
 
         # Determine HA service call
         if "on" in payload:
@@ -235,7 +235,7 @@ class DomoticService:
         result = await self._ha_post(f"services/{service}", service_data)
         if result is not None:
             return {"ok": True, "state": payload}
-        return {"ok": False, "error": "HA service call failed"}
+        return {"ok": False, "error": "Échec de l'appel au service HA"}
 
     async def list_areas(self) -> list[dict]:
         """List HA areas (rooms)."""
@@ -309,7 +309,7 @@ async def handle_client(ws, svc: DomoticService) -> None:
                 if state:
                     await ws.send(json.dumps({"ok": True, "data": state}))
                 else:
-                    await ws.send(json.dumps({"ok": False, "error": "Device not found"}))
+                    await ws.send(json.dumps({"ok": False, "error": "Appareil introuvable"}))
 
             elif action == "set_state":
                 result = await svc.set_state(

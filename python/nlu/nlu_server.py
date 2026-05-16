@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 
 # Patch global EXO : forcer le working directory à D:/EXO/ pour tous les services
@@ -465,7 +465,7 @@ async def handle_client(ws):
             try:
                 msg = json_loads(raw)
             except Exception:
-                await ws.send(json_dumps({"type": "error", "message": "Invalid JSON"}))
+                await ws.send(json_dumps({"type": "error", "message": "JSON invalide"}))
                 continue
 
             action = msg.get("action", "")
@@ -473,7 +473,7 @@ async def handle_client(ws):
             if action == "classify":
                 text = msg.get("text", "").strip()
                 if not text:
-                    await ws.send(json_dumps({"type": "error", "message": "Empty text"}))
+                    await ws.send(json_dumps({"type": "error", "message": "Texte vide"}))
                     continue
                 _v9.begin_request()
                 result = regex_nlu.classify(text)
@@ -484,7 +484,7 @@ async def handle_client(ws):
             elif action == "parse_intent":
                 text = msg.get("text", "").strip()
                 if not text:
-                    await ws.send(json_dumps({"type": "error", "message": "Empty text"}))
+                    await ws.send(json_dumps({"type": "error", "message": "Texte vide"}))
                     continue
                 _v9.begin_request()
                 intent = intent_engine.parse_intent(text)
@@ -496,7 +496,7 @@ async def handle_client(ws):
             elif action == "extract_goals":
                 text = msg.get("text", "").strip()
                 if not text:
-                    await ws.send(json_dumps({"type": "error", "message": "Empty text"}))
+                    await ws.send(json_dumps({"type": "error", "message": "Texte vide"}))
                     continue
                 _v9.begin_request()
                 goals = intent_engine.extract_goals(text)
@@ -506,7 +506,7 @@ async def handle_client(ws):
             elif action == "extract_constraints":
                 text = msg.get("text", "").strip()
                 if not text:
-                    await ws.send(json_dumps({"type": "error", "message": "Empty text"}))
+                    await ws.send(json_dumps({"type": "error", "message": "Texte vide"}))
                     continue
                 _v9.begin_request()
                 constraints = intent_engine.extract_constraints(text)
@@ -516,7 +516,7 @@ async def handle_client(ws):
             elif action == "extract_preferences":
                 text = msg.get("text", "").strip()
                 if not text:
-                    await ws.send(json_dumps({"type": "error", "message": "Empty text"}))
+                    await ws.send(json_dumps({"type": "error", "message": "Texte vide"}))
                     continue
                 _v9.begin_request()
                 prefs = intent_engine.extract_preferences(text)

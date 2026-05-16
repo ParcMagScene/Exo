@@ -136,7 +136,11 @@ def _normalize_chunk_bytes(raw: int) -> int:
 
 # Alias des voix EXO -> voix Orpheus reelles.
 # Toute voix inconnue retombe sur STATE.default_voice (cf _resolve_voice).
+# NOTE : EXO expose UNE SEULE voix logique "orpheus" cote client (anti-XTTS
+# patch). En interne, le modele GGUF requiert un token de voix reel
+# (pierre/amelie/marie) ; "orpheus" alias -> STATE.default_voice (pierre).
 VOICE_ALIASES = {
+    "orpheus":       "pierre",
     "exo_default":   "pierre",
     "default":       "pierre",
     "fr_male_01":    "pierre",
@@ -149,10 +153,18 @@ VOICE_ALIASES = {
 }
 
 
+# Patch anti-XTTS : les anciens IDs de voix XTTS exposes par la GUI sont
+# remappes vers la voix logique unique "orpheus" (qui retombe sur le token
+# GGUF reel via VOICE_ALIASES). Le modele continue d'utiliser pierre/amelie/
+# marie en interne mais aucun client ne doit plus pouvoir les selectionner.
+LEGACY_XTTS_VOICES = {"pierre", "amelie", "marie"}
+
+
 def _resolve_voice(voice: Optional[str]) -> str:
     """Normalise et valide une voix demandee.
 
     - vide / None -> default_voice
+    - voix XTTS heritee (pierre/amelie/marie) -> remappee vers 'orpheus'
     - exact match dans STATE.voices -> renvoyee telle quelle
     - alias connu -> voix Orpheus correspondante
     - sinon -> default_voice (jamais la voix brute, qui crasherait CUDA
@@ -161,6 +173,9 @@ def _resolve_voice(voice: Optional[str]) -> str:
     raw = (voice or "").strip().lower()
     if not raw:
         return STATE.default_voice
+    if raw in LEGACY_XTTS_VOICES:
+        log.info("voice legacy XTTS '%s' remappee -> 'orpheus'", raw)
+        raw = "orpheus"
     valid = {v.lower() for v in STATE.voices}
     if raw in valid:
         return raw
@@ -420,23 +435,29 @@ class Session:
                 elif t == "ping":
                     await ws.send(json.dumps({"type": "pong"}))
                 elif t == "list_voices":
+                    # Patch anti-XTTS : on n'expose qu'une seule voix logique
+                    # cote client ("orpheus"). Le mapping vers le token GGUF
+                    # reel est fait par _resolve_voice.
                     await ws.send(json.dumps({
                         "type": "voices",
-                        "available": list(STATE.voices),
-                        "current": STATE.default_voice,
+                        "available": ["orpheus"],
+                        "current": "orpheus",
                     }))
                 elif t == "set_voice":
-                    new_voice = (msg.get("voice") or "").strip().lower()
-                    if new_voice and new_voice in STATE.voices:
-                        STATE.default_voice = new_voice
+                    # Patch anti-XTTS : on resout via _resolve_voice pour
+                    # accepter "orpheus" (et remapper les anciens IDs XTTS).
+                    requested = (msg.get("voice") or "").strip().lower()
+                    resolved = _resolve_voice(requested)
+                    if resolved in STATE.voices:
+                        STATE.default_voice = resolved
                         await ws.send(json.dumps({
                             "type": "voice_set",
-                            "voice": new_voice,
+                            "voice": "orpheus",
                         }))
                     else:
                         await ws.send(json.dumps({
                             "type": "error",
-                            "message": f"unknown voice: {new_voice!r}",
+                            "message": f"unknown voice: {requested!r}",
                         }))
         except websockets.exceptions.ConnectionClosed:
             pass
@@ -459,102 +480,164 @@ class Session:
             await ws.send(json.dumps({"type": "error", "message": "Empty text"}))
             return
 
-        rate = float(msg.get("rate", 0.93))
+        # Rate par defaut : env ORPHEUS_DEFAULT_RATE > fallback 0.93.
+        try:
+            _env_rate = float(os.environ.get("ORPHEUS_DEFAULT_RATE", "0.93"))
+        except ValueError:
+            _env_rate = 0.93
+        rate = float(msg.get("rate", _env_rate))
+
+        # Pauses de pacing inter-phrase / inter-virgule (silence PCM16 zero).
+        try:
+            _sent_ms = int(os.environ.get("ORPHEUS_SENTENCE_PAUSE_MS", "0"))
+        except ValueError:
+            _sent_ms = 0
+        try:
+            _comma_ms = int(os.environ.get("ORPHEUS_COMMA_PAUSE_MS", "0"))
+        except ValueError:
+            _comma_ms = 0
+
         voice = (msg.get("voice") or "").strip().lower() or STATE.default_voice
         await ws.send(json.dumps({"type": "start", "text": text}))
 
+        target_bytes = self.chunk_bytes
+        chunk_duration_s = target_bytes / float(SAMPLE_RATE * OUTPUT_BYTES_PER_SAMPLE)
+
+        # ── Segmentation par phrase / virgule pour injecter du silence ──
+        # On garde le texte intact si pauses=0 (ancien comportement).
+        def _segment(t: str) -> list[tuple[str, int]]:
+            if _sent_ms <= 0 and _comma_ms <= 0:
+                return [(t, 0)]
+            out: list[tuple[str, int]] = []
+            buf: list[str] = []
+            i = 0
+            n = len(t)
+            while i < n:
+                ch = t[i]
+                buf.append(ch)
+                if ch in ".!?;":
+                    seg = "".join(buf).strip()
+                    if seg:
+                        out.append((seg, _sent_ms))
+                    buf = []
+                elif ch == ",":
+                    seg = "".join(buf).strip()
+                    if seg:
+                        out.append((seg, _comma_ms))
+                    buf = []
+                i += 1
+            tail = "".join(buf).strip()
+            if tail:
+                out.append((tail, 0))
+            return out or [(t, 0)]
+
+        segments = _segment(text)
+
         loop = asyncio.get_event_loop()
-        queue: asyncio.Queue = asyncio.Queue(maxsize=64)
-        SENTINEL = object()
-
-        def _producer() -> None:
-            try:
-                for pcm_chunk in _stream_pcm(
-                    text=text,
-                    voice=voice,
-                    speed=rate,
-                    chunk_bytes=self.chunk_bytes,
-                    cancel_flag=self._cancel,
-                ):
-                    if self._cancel.is_set():
-                        break
-                    asyncio.run_coroutine_threadsafe(
-                        queue.put(pcm_chunk), loop
-                    ).result()
-            except Exception as exc:
-                log.exception("Engine erreur: %s", exc)
-                asyncio.run_coroutine_threadsafe(
-                    queue.put(("error", str(exc))), loop
-                ).result()
-            finally:
-                asyncio.run_coroutine_threadsafe(
-                    queue.put(SENTINEL), loop
-                ).result()
-
         t0 = time.monotonic()
-        fut = loop.run_in_executor(Session._executor, _producer)
-
         first_chunk_ms = None
         total_bytes = 0
         chunks_sent = 0
         err_msg: "str | None" = None
-
-        # Pacing : on envoie chaque chunk a la cadence reelle de sa duree
-        # audio. Le 1er chunk part immediatement (no-pace) pour minimiser la
-        # latence au top du parler. Les suivants sont espaces de
-        # `chunk_duration_s`. Cela evite les bursts (= surcharge ring buffer
-        # client => underflow apres) et garantit un debit regulier.
-        target_bytes = self.chunk_bytes
-        chunk_duration_s = target_bytes / float(SAMPLE_RATE * OUTPUT_BYTES_PER_SAMPLE)
         next_send_at = None  # rempli apres le 1er chunk
 
-        while True:
-            item = await queue.get()
-            if item is SENTINEL:
-                break
-            if isinstance(item, tuple) and item[0] == "error":
-                err_msg = item[1]
-                break
+        for seg_idx, (seg_text, pause_ms) in enumerate(segments):
             if self._cancel.is_set():
-                continue
+                break
 
-            # Validation taille / alignement
-            n = len(item)
-            if n == 0:
-                log.warning("[ws] chunk vide ignore")
-                continue
-            if n % OUTPUT_BYTES_PER_SAMPLE != 0:
-                log.warning("[ws] chunk mal aligne (%d B), troncature", n)
-                item = item[: n - (n % OUTPUT_BYTES_PER_SAMPLE)]
+            queue: asyncio.Queue = asyncio.Queue(maxsize=64)
+            SENTINEL = object()
+
+            def _producer(_seg=seg_text) -> None:
+                try:
+                    for pcm_chunk in _stream_pcm(
+                        text=_seg,
+                        voice=voice,
+                        speed=rate,
+                        chunk_bytes=self.chunk_bytes,
+                        cancel_flag=self._cancel,
+                    ):
+                        if self._cancel.is_set():
+                            break
+                        asyncio.run_coroutine_threadsafe(
+                            queue.put(pcm_chunk), loop
+                        ).result()
+                except Exception as exc:
+                    log.exception("Engine erreur: %s", exc)
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put(("error", str(exc))), loop
+                    ).result()
+                finally:
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put(SENTINEL), loop
+                    ).result()
+
+            fut = loop.run_in_executor(Session._executor, _producer)
+
+            while True:
+                item = await queue.get()
+                if item is SENTINEL:
+                    break
+                if isinstance(item, tuple) and item[0] == "error":
+                    err_msg = item[1]
+                    break
+                if self._cancel.is_set():
+                    continue
+
                 n = len(item)
-            if n != target_bytes:
-                # Tolere uniquement si dernier chunk drain (taille != target)
-                log.debug("[ws] chunk taille %d != target %d", n, target_bytes)
+                if n == 0:
+                    continue
+                if n % OUTPUT_BYTES_PER_SAMPLE != 0:
+                    log.warning("[ws] chunk mal aligne (%d B), troncature", n)
+                    item = item[: n - (n % OUTPUT_BYTES_PER_SAMPLE)]
+                    n = len(item)
 
-            # Pacing temps-reel : on attend jusqu'au prochain creneau
-            now = time.monotonic()
-            if next_send_at is not None:
-                wait = next_send_at - now
-                if wait > 0:
-                    # Cap defensif : jamais plus que la duree d'un chunk
-                    await asyncio.sleep(min(wait, chunk_duration_s))
-            await ws.send(item)
-            sent_at = time.monotonic()
-            total_bytes += n
-            chunks_sent += 1
-            if first_chunk_ms is None:
-                first_chunk_ms = (sent_at - t0) * 1000.0
-                log.info(
-                    "[ws] first_chunk_ms=%.0f size=%dB dur=%.1fms",
-                    first_chunk_ms, n, chunk_duration_s * 1000.0,
-                )
-                next_send_at = sent_at + chunk_duration_s
-            else:
-                # Avance la deadline d'un cran ; si on a glisse (next < now),
-                # on resynchronise sur 'now' pour ne jamais empiler de retard.
-                next_send_at = max(sent_at, next_send_at) + chunk_duration_s
+                now = time.monotonic()
+                if next_send_at is not None:
+                    wait = next_send_at - now
+                    if wait > 0:
+                        await asyncio.sleep(min(wait, chunk_duration_s))
+                await ws.send(item)
+                sent_at = time.monotonic()
+                total_bytes += n
+                chunks_sent += 1
+                if first_chunk_ms is None:
+                    first_chunk_ms = (sent_at - t0) * 1000.0
+                    log.info(
+                        "[ws] first_chunk_ms=%.0f size=%dB dur=%.1fms segs=%d",
+                        first_chunk_ms, n, chunk_duration_s * 1000.0, len(segments),
+                    )
+                    next_send_at = sent_at + chunk_duration_s
+                else:
+                    next_send_at = max(sent_at, next_send_at) + chunk_duration_s
 
-        await fut
+            await fut
+
+            if err_msg:
+                break
+
+            # Silence inter-segment : on emet des chunks de zero PCM16 a la
+            # cadence reelle, pour respecter la timeline cote client.
+            if pause_ms > 0 and seg_idx < len(segments) - 1 and not self._cancel.is_set():
+                silence_total = int(SAMPLE_RATE * pause_ms / 1000) * OUTPUT_BYTES_PER_SAMPLE
+                # Aligne sur target_bytes
+                full_chunks = silence_total // target_bytes
+                for _ in range(max(1, full_chunks)):
+                    if self._cancel.is_set():
+                        break
+                    now = time.monotonic()
+                    if next_send_at is not None:
+                        wait = next_send_at - now
+                        if wait > 0:
+                            await asyncio.sleep(min(wait, chunk_duration_s))
+                    await ws.send(_SILENCE_PAD[:target_bytes])
+                    sent_at = time.monotonic()
+                    total_bytes += target_bytes
+                    chunks_sent += 1
+                    next_send_at = (next_send_at or sent_at) + chunk_duration_s
+
+            if err_msg:
+                break
 
         if err_msg:
             await ws.send(json.dumps({"type": "error", "message": err_msg}))

@@ -290,7 +290,7 @@ class ScenarioManager:
                               devices: list[dict]) -> dict:
         """Exécuter une action, en résolvant les wildcards de target."""
         if not self._executor:
-            return {"ok": False, "error": "No executor configured"}
+            return {"ok": False, "error": "Aucun exécuteur configuré"}
 
         target = step.target
         # Resolve wildcard targets
@@ -324,7 +324,7 @@ class ScenarioManager:
             return {"ok": True, "type": "condition", "note": "No state_fn"}
         state = await self._state_fn(step.target)
         if state is None:
-            return {"ok": False, "type": "condition", "error": "Device not found"}
+            return {"ok": False, "type": "condition", "error": "Appareil introuvable"}
         # Simple check: all params keys must match state
         ok = all(state.get(k) == v for k, v in step.params.items())
         return {"ok": ok, "type": "condition", "target": step.target}

@@ -55,6 +55,6 @@ bool AssistantQmlExposer::expose(QQmlApplicationEngine *engine,
     root->setContextProperty("logManager", LogManager::instance());
     root->setContextProperty("pipelineEventBus", PipelineEventBus::instance());
 
-    hAssistant() << "Composants exposes au QML avec succes";
+    hAssistant() << "Composants exposés au QML avec succès";
     return true;
 }

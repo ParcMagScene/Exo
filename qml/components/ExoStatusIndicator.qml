@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  ExoStatusIndicator — Indicateur d'état pipeline
@@ -22,7 +23,7 @@ Item {
         spacing: Theme.spacing6
 
         Text {
-            text: "ÉTAT"
+            text: SettingsLabels.t("comp.status")
             font.family: Theme.fontMono
             font.pixelSize: Theme.fontTiny
             font.bold: true

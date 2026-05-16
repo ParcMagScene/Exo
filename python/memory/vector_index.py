@@ -109,11 +109,33 @@ class VectorIndex:
             self._available = False
             return False
 
+    def _faiss_params(self) -> tuple[int, int, int, int]:
+        """Read FAISS RAM-opt params from ConfigManager.
+
+        Returns (m, ef_construction, ef_search, max_vectors). Falls back
+        silently to default RAM-opt profile if config is unavailable.
+        """
+        m, ef_c, ef_s, max_v = 32, 128, 64, 200000
+        try:
+            from shared.config_manager import ConfigManager
+            cfg = ConfigManager.instance()
+            faiss_cfg = cfg.section("faiss") or cfg.get("memory.faiss", {}) or {}
+            m = int(faiss_cfg.get("m", faiss_cfg.get("M", m)))
+            ef_c = int(faiss_cfg.get("efConstruction", faiss_cfg.get("ef_construction", ef_c)))
+            ef_s = int(faiss_cfg.get("efSearch", faiss_cfg.get("ef_search", ef_s)))
+            max_v = int(faiss_cfg.get("maxVectors", faiss_cfg.get("max_vectors", max_v)))
+        except Exception:
+            pass
+        return m, ef_c, ef_s, max_v
+
     def _create_index(self):
         faiss = _load_faiss()
-        index = faiss.IndexHNSWFlat(self._dim, 32, faiss.METRIC_INNER_PRODUCT)
-        index.hnsw.efConstruction = 200
-        index.hnsw.efSearch = 64
+        m, ef_c, ef_s, _max_v = self._faiss_params()
+        # HNSW32 par défaut (profil RAM 64 Go). cacheRAM=true → indice gardé entièrement
+        # en RAM (comportement natif IndexHNSWFlat, pas de mmap).
+        index = faiss.IndexHNSWFlat(self._dim, m, faiss.METRIC_INNER_PRODUCT)
+        index.hnsw.efConstruction = ef_c
+        index.hnsw.efSearch = ef_s
         return index
 
     # ── Encodage ─────────────────────────────────────

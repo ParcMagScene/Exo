@@ -121,7 +121,7 @@ void TestController::startAutoTestLoop()
     m_loopCount = 0;
     emit runningChanged();
 
-    qInfo() << "[TestController] Auto-test loop started";
+    qInfo() << "[TestController] Boucle d'auto-test démarrée";
     onAutoLoopTick();  // first run immediately
 }
 
@@ -141,7 +141,7 @@ void TestController::stopAutoTestLoop()
     }
 
     emit runningChanged();
-    qInfo() << "[TestController] Auto-test loop stopped";
+    qInfo() << "[TestController] Boucle d'auto-test arrêtée";
 }
 
 // ── Property accessors ──────────────────────────────────────────
@@ -241,7 +241,7 @@ void TestController::sendTestPing(const QString &name)
 
 void TestController::onConnected(const QString &name)
 {
-    qDebug() << "[TestController]" << name << "connected";
+    qDebug() << "[TestController]" << name << "connecté";
 }
 
 void TestController::onDisconnected(const QString &name)
@@ -252,7 +252,7 @@ void TestController::onDisconnected(const QString &name)
     if (it->pingPending) {
         it->pingPending = false;
         it->status = QStringLiteral("down");
-        it->error  = QStringLiteral("disconnected while waiting for pong");
+        it->error  = QStringLiteral("déconnecté pendant attente du pong");
         m_pendingCount = qMax(0, m_pendingCount - 1);
 
         QString err = QStringLiteral("[%1] disconnected during ping").arg(name);

@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
 import "../components"
+import "../core"
 
 // ═══════════════════════════════════════════════════════════════
 //  PipelinePageExpert — Fusion Voice Pipeline + Cognitive Timeline
@@ -23,8 +24,8 @@ Rectangle {
 
         // ── Header ──
         ExoPanelHeader {
-            title: "PIPELINE"
-            subtitle: "Voice Pipeline + Cognitive Timeline"
+            title: SettingsLabels.t("pipeline.titleExpert")
+            subtitle: SettingsLabels.t("pipeline.subtitleExpert")
         }
 
         // ── Onglets ──
@@ -38,7 +39,7 @@ Rectangle {
             }
 
             TabButton {
-                text: "Voice"
+                text: SettingsLabels.t("pipeline.tabVoice")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -49,7 +50,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Cognitive"
+                text: SettingsLabels.t("pipeline.tabCognitive")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -60,7 +61,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Métriques"
+                text: SettingsLabels.t("pipeline.tabMetrics")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -102,7 +103,7 @@ Rectangle {
                             spacing: Theme.spacing16
 
                             Text {
-                                text: "État:"
+                                text: SettingsLabels.t("common.state")
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.fontSmall
                                 color: Theme.accent
@@ -161,7 +162,7 @@ Rectangle {
 
                     // ── Waveform ──
                     Text {
-                        text: "Audio"
+                        text: SettingsLabels.t("pipeline.audio")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -211,7 +212,7 @@ Rectangle {
                         spacing: Theme.spacing8
 
                         Text {
-                            text: "Niveau Mic:"
+                            text: SettingsLabels.t("pipeline.micLevel")
                             font.family: Theme.fontMono
                             font.pixelSize: Theme.fontSmall
                             color: Theme.textSecondary
@@ -234,7 +235,7 @@ Rectangle {
 
                     // ── Transcript partial ──
                     Text {
-                        text: "Transcript partiel:"
+                        text: SettingsLabels.t("pipeline.partialTranscript")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -274,7 +275,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Étapes Cognitives"
+                        text: SettingsLabels.t("pipeline.cognitiveSteps")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -450,7 +451,7 @@ Rectangle {
                                         Item { Layout.fillWidth: true }
 
                                         Text {
-                                            text: "En attente"
+                                            text: SettingsLabels.t("common.waiting")
                                             font.family: Theme.fontMono
                                             font.pixelSize: Theme.fontMicro
                                             color: Theme.textSecondary
@@ -499,7 +500,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "VAD Latency"
+                                    text: SettingsLabels.t("observability.latencyVAD")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
@@ -529,7 +530,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "STT Latency"
+                                    text: SettingsLabels.t("observability.latencySTT")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
@@ -559,7 +560,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "LLM Latency"
+                                    text: SettingsLabels.t("observability.latencyLLM")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
@@ -589,7 +590,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "TTS Latency"
+                                    text: SettingsLabels.t("observability.latencyTTS")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
@@ -619,7 +620,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "TOTAL"
+                                    text: SettingsLabels.t("common.total")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent

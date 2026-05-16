@@ -39,19 +39,19 @@ bool TTSBackendXTTS::isAvailable() const
 void TTSBackendXTTS::setUrl(const QString &url)
 {
     m_url = url;
-    qInfo() << "[TTS] XTTS URL set:" << m_url;
+    qInfo() << "[TTSBackendOrpheus] URL definie :" << m_url;
 }
 
 void TTSBackendXTTS::setVoice(const QString &voice)
 {
     m_voice = voice;
-    qInfo() << "[TTS] XTTS voice set to:" << voice;
+    qInfo() << "[TTSBackendOrpheus] Voix definie sur :" << voice;
 }
 
 void TTSBackendXTTS::setLang(const QString &lang)
 {
     m_lang = lang;
-    qInfo() << "[TTS] XTTS language set to:" << lang;
+    qInfo() << "[TTSBackendOrpheus] Langue definie sur :" << lang;
 }
 
 void TTSBackendXTTS::resetConnection()
@@ -72,10 +72,10 @@ void TTSBackendXTTS::warmConnect()
 {
     if (m_url.isEmpty()) return;
     if (m_ws && m_connected) {
-        qInfo() << "[TTS] warmConnect: already connected";
+        qInfo() << "[TTS] warmConnect : déjà connecté";
         return;
     }
-    qInfo() << "[TTS] warmConnect: early connection to" << m_url;
+    qInfo() << "[TTS] warmConnect : connexion anticipée à" << m_url;
     ensureConnected();
     if (m_connected)
         setupKeepalive();
@@ -93,12 +93,12 @@ void TTSBackendXTTS::setupKeepalive()
                 QStringLiteral(R"({"type":"ping"})"),
                 "TTSBackendXTTS::keepalive");
         } else {
-            qInfo() << "[TTS] keepalive: connection lost, reconnecting...";
+            qInfo() << "[TTS] keepalive : connexion perdue, reconnexion…";
             ensureConnected();
         }
     });
     m_keepaliveTimer->start();
-    qInfo() << "[TTS] WebSocket keepalive started (15s interval)";
+    qInfo() << "[TTS] Keepalive WebSocket démarré (intervalle 15 s)";
 }
 
 void TTSBackendXTTS::cancel()
@@ -123,7 +123,7 @@ bool TTSBackendXTTS::tryConnect()
     // restait true et la prochaine synthèse envoyait sur socket mort.
     connect(m_ws, &QWebSocket::disconnected, this, [this]() {
         if (m_connected) {
-            qWarning() << "[TTS] WebSocket disconnected — invalidating connection";
+            qWarning() << "[TTS] WebSocket déconnecté — invalidation de la connexion";
             m_connected = false;
             m_readyReceived = false;
         }
@@ -154,7 +154,7 @@ bool TTSBackendXTTS::tryConnect()
     disconnect(connErr);
 
     m_connected = (m_ws->state() == QAbstractSocket::ConnectedState);
-    qWarning() << "[TTS] tryConnect: connected =" << m_connected
+    qWarning() << "[TTS] tryConnect : connecté =" << m_connected
                << "state:" << m_ws->state()
                << "après" << elapsed.elapsed() << "ms";
 
@@ -172,7 +172,7 @@ bool TTSBackendXTTS::tryConnect()
 
     disconnect(readyConn);
     m_readyReceived = gotReady || m_readyReceived;
-    qWarning() << "[TTS] XTTS v2 ready message:" << (m_readyReceived ? "OK" : "timeout");
+    qWarning() << "[TTSBackendOrpheus] Message pret Orpheus :" << (m_readyReceived ? "OK" : "timeout");
 
     return m_connected;
 }
@@ -183,9 +183,9 @@ bool TTSBackendXTTS::ensureConnected()
         return true;
 
     qWarning() << "[TTS] tryPythonTTS: connexion à" << m_url;
-    qInfo().noquote() << "[TTSManager] Connecting to" << m_url;
+    qInfo().noquote() << "[TTSManager] Connexion à" << m_url;
     if (tryConnect()) {
-        qWarning() << "[TTS] Connected to XTTS CUDA GPU server";
+    qWarning() << "[TTSBackendOrpheus] Connecte au serveur Orpheus (Python WS 8767)";
         return true;
     }
 
@@ -194,14 +194,14 @@ bool TTSBackendXTTS::ensureConnected()
     if (tryConnect())
         return true;
 
-    qWarning() << "[TTS] Python TTS unavailable — fallback Qt TTS";
+    qWarning() << "[TTS] TTS Python indisponible — repli sur Qt TTS";
     return false;
 }
 
 bool TTSBackendXTTS::synthesize(const TTSRequest &req)
 {
     if (m_url.isEmpty()) {
-        qWarning() << "[TTS] tryPythonTTS: URL vide — skip XTTS";
+        qWarning() << "[TTSBackendOrpheus] URL vide — Orpheus ignore";
         return false;
     }
 
@@ -256,8 +256,8 @@ bool TTSBackendXTTS::synthesize(const TTSRequest &req)
             gotAudio = true;
             if (synthLatency.isValid()) {
                 const qint64 firstMs = synthLatency.elapsed();
-                qWarning() << "[Latency] TTS backend first-chunk:" << firstMs << "ms";
-                qInfo().noquote() << "[TTSManager] First chunk received in" << firstMs << "ms";
+                qWarning() << "[Latence] TTS backend premier chunk :" << firstMs << "ms";
+                qInfo().noquote() << "[TTSManager] Premier chunk reçu en" << firstMs << "ms";
                 synthLatency.invalidate();
             }
             synthTimeout.start();  // restart timeout on each chunk
@@ -307,13 +307,13 @@ bool TTSBackendXTTS::synthesize(const TTSRequest &req)
             return true;
         }
 
-        qWarning() << "[TTS] XTTS terminé sans audio — fallback Qt TTS";
+        qCritical() << "[TTSBackendOrpheus] Orpheus termine sans audio — ERREUR (aucun fallback, patch anti-XTTS)";
         resetConnection();
         return false;
     }
 
     // Timeout — reset connection so next call starts fresh
-    qWarning() << "[TTS] XTTS timeout après" << PY_TTS_TIMEOUT_MS << "ms — reset connexion";
+    qCritical() << "[TTSBackendOrpheus] timeout apres" << PY_TTS_TIMEOUT_MS << "ms — reset connexion (aucun fallback)";
     resetConnection();
     return false;
 }

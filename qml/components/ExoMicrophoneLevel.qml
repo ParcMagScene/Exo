@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  ExoMicrophoneLevel — VU mètre micro simplifié
@@ -18,7 +19,7 @@ Item {
         spacing: Theme.spacing10
 
         Text {
-            text: "MICRO"
+            text: SettingsLabels.t("comp.mic")
             font.family: Theme.fontMono
             font.pixelSize: Theme.fontTiny
             font.bold: true

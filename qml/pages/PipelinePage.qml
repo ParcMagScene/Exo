@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
 import "../components"
+import "../core"
 
 Rectangle {
     id: root
@@ -129,7 +130,7 @@ Rectangle {
 
         // ── Header ──
         ExoPanelHeader {
-            title: "PIPELINE MONITOR"
+            title: SettingsLabels.t("pipeline.title")
 
             rightContent: [
                 Text {
@@ -300,7 +301,7 @@ Rectangle {
                             { label: "Idle",       color: Theme.pipelineIdle },
                             { label: "Active",     color: Theme.pipelineActive },
                             { label: "Processing", color: Theme.pipelineProcessing },
-                            { label: "Error",      color: Theme.pipelineError }
+                            { label: "Erreur",      color: Theme.pipelineError }
                         ]
 
                         Row {
@@ -349,7 +350,7 @@ Rectangle {
                                 anchors.rightMargin: Theme.spacing10
 
                                 Text {
-                                    text: "EVENT TIMELINE"
+                                    text: SettingsLabels.t("pipeline.eventsTimeline")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontTiny
                                     font.bold: true
@@ -556,7 +557,7 @@ Rectangle {
 
                                 Text {
                                     visible: !root.selectedModule
-                                    text: "Cliquer sur un module\npour l'inspecter"
+                                    text: SettingsLabels.t("pipeline.clickHint")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontMicro
                                     color: Theme.textMuted
@@ -574,7 +575,7 @@ Rectangle {
                                     RowLayout {
                                         spacing: Theme.spacing8
                                         Text {
-                                            text: "État:"
+                                            text: SettingsLabels.t("common.state")
                                             font.family: Theme.fontMono
                                             font.pixelSize: Theme.fontMicro
                                             color: Theme.textMuted
@@ -625,7 +626,7 @@ Rectangle {
                                     }
 
                                     Text {
-                                        text: "Métriques"
+                                        text: SettingsLabels.t("pipeline.tabMetrics")
                                         font.family: Theme.fontMono
                                         font.pixelSize: Theme.fontTiny
                                         font.bold: true
@@ -650,7 +651,7 @@ Rectangle {
                                     }
 
                                     Text {
-                                        text: "Événements récents"
+                                        text: SettingsLabels.t("pipeline.recentEvents")
                                         font.family: Theme.fontMono
                                         font.pixelSize: Theme.fontTiny
                                         font.bold: true
@@ -681,7 +682,7 @@ Rectangle {
                                         spacing: Theme.spacing8
 
                                         Text {
-                                            text: "Logs du service"
+                                            text: SettingsLabels.t("pipeline.serviceLogs")
                                             font.family: Theme.fontMono
                                             font.pixelSize: Theme.fontTiny
                                             font.bold: true
@@ -808,7 +809,7 @@ Rectangle {
                         property string logLine: ""
 
                         MenuItem {
-                            text: "Copier cette ligne"
+                            text: SettingsLabels.t("common.copyLine")
                             onTriggered: {
                                 if (typeof logManager !== 'undefined' && logManager.copyToClipboard)
                                     logManager.copyToClipboard(inspectorLineMenu.logLine)
@@ -822,7 +823,7 @@ Rectangle {
                         }
 
                         MenuItem {
-                            text: "Copier tous les logs du module"
+                            text: SettingsLabels.t("pipeline.copyModuleLogs")
                             onTriggered: {
                                 if (inspectorPanel.moduleLogs.length === 0) return
                                 var text = inspectorPanel.moduleLogs.join("\n")

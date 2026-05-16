@@ -67,7 +67,7 @@ void ErrorManager::reportRecovery(const QString &errorId)
     for (auto &rec : m_errors) {
         if (rec.id == errorId) {
             rec.recovered = true;
-            qCInfo(exoError) << "Error recovered:" << errorId;
+            qCInfo(exoError) << "Erreur récupérée :" << errorId;
             return;
         }
     }

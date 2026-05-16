@@ -32,6 +32,7 @@ import websockets.server
 
 from shared.singleton_guard import ensure_single_instance
 from shared.base_service import init_v9
+from shared.config_validator import validate_config_file
 
 from integrations.home_bridge import HomeBridge
 from integrations.ha_entities import EntityManager
@@ -55,6 +56,22 @@ from agent_manager import AgentManager
 
 # v11-v25 — Lazy-loaded via _version_registry (138 modules deferred)
 from _version_registry import create_all_versions
+
+# Hardening 2026 — réutilisation des helpers partagés (sûr / opportuniste).
+try:
+    from shared.hardening import safe_json_loads as _safe_json_loads  # type: ignore
+    from shared.hardening import safe_json_dumps as _safe_json_dumps  # type: ignore
+except Exception:  # noqa: BLE001
+    def _safe_json_loads(raw, default=None):  # type: ignore
+        try:
+            return json.loads(raw)
+        except Exception:  # noqa: BLE001
+            return default
+    def _safe_json_dumps(obj, default="{}"):  # type: ignore
+        try:
+            return json.dumps(obj)
+        except Exception:  # noqa: BLE001
+            return default
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,6 +101,16 @@ def _load_env() -> None:
 class GUIServer:
     """WebSocket server that the React GUI connects to (ws://localhost:8765)."""
 
+    # Ensemble des états reconnus du côté GUI (validation soft : on logge
+    # une transition inattendue mais on ne bloque jamais le broadcast pour
+    # ne pas casser le pipeline existant).
+    _KNOWN_STATES = {
+        "IDLE", "LISTENING", "TRANSCRIBING", "ANTICIPATING",
+        "THINKING", "SPEAKING", "ERROR",
+        "idle", "listening", "transcribing", "anticipating",
+        "thinking", "speaking", "error", "interrupting",
+        "detecting_speech", "waking", "processing",
+    }
     def __init__(self, sync: SyncManager, pipeline_mgr: "PipelineManager",
                  agent_mgr: AgentManager | None = None,
                  v11: dict | None = None,
@@ -129,25 +156,31 @@ class GUIServer:
         logger.info("GUI client connected (%d total)", len(self._clients))
         try:
             # ReadinessProtocol v5 — envoyer ready avant le snapshot
-            await ws.send(json.dumps({"type": "ready", "service": "orchestrator"}))
+            await ws.send(_safe_json_dumps({"type": "ready", "service": "orchestrator"}))
 
             # Send initial snapshot
             snapshot = self._sync.build_full_snapshot()
             snapshot["state"] = self._state
             snapshot["volume"] = self._volume
             snapshot["text"] = self._text
-            await ws.send(json.dumps(snapshot))
+            await ws.send(_safe_json_dumps(snapshot))
 
             async for raw in ws:
-                await self._handle_client_message(ws, raw)
+                try:
+                    await self._handle_client_message(ws, raw)
+                except Exception as exc:  # noqa: BLE001
+                    # Une erreur dans le dispatch d'un message ne doit jamais
+                    # tuer la connexion GUI : on logge et on continue.
+                    logger.error("GUI message dispatch error: %s", exc, exc_info=False)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("GUI handler stopped: %s", exc)
         finally:
             self._clients.discard(ws)
             logger.info("GUI client disconnected (%d remaining)", len(self._clients))
 
     async def _handle_client_message(self, ws: Any, raw: str) -> None:
-        try:
-            msg = json.loads(raw)
-        except json.JSONDecodeError:
+        msg = _safe_json_loads(raw, default=None)
+        if not isinstance(msg, dict):
             return
 
         msg_type = msg.get("type")
@@ -2039,18 +2072,34 @@ class GUIServer:
     async def broadcast(self, data: dict) -> None:
         if not self._clients:
             return
-        payload = json.dumps(data)
-        await asyncio.gather(
+        payload = _safe_json_dumps(data)
+        if not payload:
+            logger.warning("broadcast: payload non-serialisable, abandon")
+            return
+        results = await asyncio.gather(
             *(c.send(payload) for c in self._clients),
             return_exceptions=True,
         )
+        # Audit des envois en échec sans casser la boucle.
+        for client, res in zip(list(self._clients), results):
+            if isinstance(res, Exception):
+                logger.debug("broadcast: client perdu (%s) — retiré", type(res).__name__)
+                self._clients.discard(client)
 
     async def push_state(self, state: str, volume: float = 0.0, text: str = "") -> None:
+        # Validation soft : on accepte toutes les valeurs mais on logge celles
+        # qui ne font pas partie de l'ensemble connu (utile pour repérer un
+        # service amont qui enverrait un état fantaisiste).
+        if state not in self._KNOWN_STATES:
+            logger.warning("[gui][state] valeur inconnue: %r", state)
+        old = self._state
         self._state = state
         if volume:
             self._volume = volume
         if text:
             self._text = text
+        if old != state:
+            logger.info("[gui][state] %s -> %s", old, state)
         await self.broadcast({"state": state, "volume": self._volume, "text": text})
 
 
@@ -2113,6 +2162,19 @@ class PipelineManager:
 
 async def main() -> None:
     _load_env()
+
+    # Hardening 2026-05-16 — validation non bloquante de la config principale.
+    # On logue errors/warnings sans interrompre le boot (toute valeur manquante
+    # est récupérée par config_manager._DEFAULT_CONFIG en aval).
+    _cfg_report = validate_config_file(
+        Path(__file__).resolve().parent.parent.parent / "config" / "exo_v9.json",
+        required_keys={"audio": dict, "vad": dict, "stt": dict, "tts": dict, "llm": dict},
+    )
+    logger.info(_cfg_report.summary())
+    for _err in _cfg_report.errors:
+        logger.error("config exo_v9.json — %s", _err)
+    for _warn in _cfg_report.warnings:
+        logger.warning("config exo_v9.json — %s", _warn)
 
     # Prevent duplicate instances
     ensure_single_instance(8765, "exo_server")

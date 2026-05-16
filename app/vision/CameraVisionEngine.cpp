@@ -153,13 +153,13 @@ void CameraVisionEngine::runVisionCycle()
 void CameraVisionEngine::startAutoCycle(int intervalMs)
 {
     m_autoCycleTimer.start(intervalMs);
-    qDebug() << "[CameraVisionEngine] Auto-cycle started every" << intervalMs << "ms";
+    qDebug() << "[CameraVisionEngine] Cycle automatique démarré toutes les" << intervalMs << "ms";
 }
 
 void CameraVisionEngine::stopAutoCycle()
 {
     m_autoCycleTimer.stop();
-    qDebug() << "[CameraVisionEngine] Auto-cycle stopped";
+    qDebug() << "[CameraVisionEngine] Cycle automatique arrêté";
 }
 
 // ── Configuration ──

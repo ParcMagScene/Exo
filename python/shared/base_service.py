@@ -54,13 +54,31 @@ except ImportError:
             return _json.dumps(obj, ensure_ascii=False, default=str, **kw)
 
 
-# ── WS defaults ──────────────────────────────────────────────
+# ── WS defaults (RAM-opt v9 : valeurs cibles, surchargeables via config exo_v9.json) ──
 WS_PING_INTERVAL = 20   # seconds between pings
 WS_PING_TIMEOUT  = 10   # seconds to wait for pong before closing
-WS_MAX_SIZE      = 10 * 1024 * 1024  # 10 MB max message size
+# WS_MAX_SIZE / WS_BUFFER_SIZE : valeurs par défaut = profil RAM 64 Go.
+# Surchargées au runtime depuis ConfigManager (ws.maxMessageSize / ws.bufferSize).
+WS_MAX_SIZE      = 8 * 1024 * 1024   # 8 MB max message size (RAM-opt)
+WS_BUFFER_SIZE   = 4 * 1024 * 1024   # 4 MB socket write buffer (RAM-opt)
 WS_RETRY_COUNT   = 3
 WS_RETRY_BACKOFF = 0.2  # seconds (doubled each attempt)
 WS_RETRY_MAX_BACKOFF = 0.4  # v6.0 perf audit : cap exp backoff (voice pipeline must not stall)
+
+
+def _ws_runtime_limits() -> tuple[int, int]:
+    """Read ws.maxMessageSize / ws.bufferSize from ConfigManager if available.
+
+    Falls back silently to module defaults if config is not loaded yet
+    (e.g. very early in a service bootstrap or in tests).
+    """
+    try:
+        cfg = ConfigManager.instance()
+        max_size = int(cfg.get("ws.maxMessageSize", cfg.get("ws.max_message_size", WS_MAX_SIZE)))
+        buf_size = int(cfg.get("ws.bufferSize", cfg.get("ws.buffer_size", WS_BUFFER_SIZE)))
+        return max_size, buf_size
+    except Exception:
+        return WS_MAX_SIZE, WS_BUFFER_SIZE
 CB_FAILURE_THRESHOLD = 3
 CB_COOLDOWN_S = 15.0
 
@@ -192,11 +210,18 @@ class BaseService:
 
     # ── WS serve helper ──────────────────────────────────────────
     def ws_serve_kwargs(self, **overrides) -> dict:
-        """Return standard websockets.serve kwargs with keepalive."""
+        """Return standard websockets.serve kwargs with keepalive.
+
+        RAM-opt v9 : ``max_size`` lu depuis ConfigManager
+        (ws.maxMessageSize) si dispo, sinon defaults module.
+        Note: ``write_limit`` / ``read_limit`` ne sont pas accept\u00e9s par
+        ``websockets.asyncio.server.serve`` -> on s'en tient \u00e0 ``max_size``.
+        """
+        max_size, _buf_size = _ws_runtime_limits()
         defaults = {
             "ping_interval": WS_PING_INTERVAL,
             "ping_timeout": WS_PING_TIMEOUT,
-            "max_size": WS_MAX_SIZE,
+            "max_size": max_size,
         }
         defaults.update(overrides)
         return defaults

@@ -81,7 +81,7 @@ void LogManager::setLogLevel(LogLevel level)
 {
     m_currentLevel = level;
     setupLoggingRules();
-    hLog() << "Niveau de logging changé à:" << logLevelToString(level);
+    hLog() << "Niveau de journalisation modifié :" << logLevelToString(level);
 }
 
 void LogManager::setLogLevel(const QString &levelName)
@@ -105,14 +105,14 @@ void LogManager::enableFileLogging(const QString &logFilePath)
 
     m_fileEnabled = true;
     createLogFile();
-    hLog() << "Logging fichier activé:" << m_logFilePath;
+    hLog() << "Journalisation fichier activée :" << m_logFilePath;
 }
 
 void LogManager::disableFileLogging()
 {
     m_fileEnabled = false;
     m_logFilePath.clear();
-    hLog() << "Logging fichier désactivé";
+    hLog() << "Journalisation fichier désactivée";
 }
 
 QString LogManager::logLevelToString(LogLevel level)

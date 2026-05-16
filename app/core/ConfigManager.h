@@ -62,6 +62,7 @@ public:
     // ── Raccourcis API Keys ──────────────────────────
     Q_INVOKABLE QString getClaudeApiKey() const;
     Q_INVOKABLE QString getClaudeModel() const;
+    Q_INVOKABLE QString getClaudeFallbackModel() const;
     Q_INVOKABLE QString getWeatherApiKey() const;
 
     // ── Raccourcis paramètres courants ────────────────
@@ -161,7 +162,12 @@ private:
     // ── Constantes ───────────────────────────────────
     static constexpr const char *DEFAULT_WAKE_WORD       = "Exo";
     static constexpr const char *DEFAULT_WEATHER_CITY    = "Paris";
-    static constexpr const char *DEFAULT_CLAUDE_MODEL    = "claude-sonnet-4-20250514";
+    static constexpr const char *DEFAULT_CLAUDE_MODEL    = "claude-opus-4.7";
+    // LLM LOCK 2026-05-16 : pas de fallback. Constante alignee sur le modele
+    // canonique pour qu'un eventuel appel residuel a setFallbackModel(...) ne
+    // puisse pas introduire de divergence.
+    static constexpr const char *FALLBACK_CLAUDE_MODEL   = "claude-opus-4.7";
+    static constexpr const char *CLAUDE_DEPRECATION_NOTICE = "claude-opus-4.7 only — no fallback";
     static constexpr const char *DEFAULT_VOICE_LANGUAGE  = "fr-FR";
     static constexpr const char *DEFAULT_LOG_LEVEL       = "Info";
     static constexpr double      DEFAULT_VOICE_RATE      = -0.3;

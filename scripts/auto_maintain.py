@@ -546,7 +546,7 @@ def generate_context_md() -> str:
         "- Whisper.cpp (Vulkan GPU)",
         "- Coqui XTTS v2 (DirectML / CUDA)",
         "- Silero VAD, OpenWakeWord, FAISS, SentenceTransformers",
-        "- Claude claude-sonnet-4-20250514 (Anthropic API)",
+        "- Claude claude-opus-4.7 (Anthropic API, STRICT, aucun fallback)",
         "",
     ]
     )

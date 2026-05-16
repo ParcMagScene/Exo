@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
 import "../components"
+import "../core"
 
 // ═══════════════════════════════════════════════════════════════
 //  SpatialCognitionPageExpert — Cognition Spatiale complète
@@ -18,8 +19,8 @@ Rectangle {
         spacing: 0
 
         ExoPanelHeader {
-            title: "COGNITION"
-            subtitle: "Intelligence Spatiale & Décisions"
+            title: SettingsLabels.t("cognition.title")
+            subtitle: SettingsLabels.t("cognition.subtitle")
         }
 
         TabBar {
@@ -32,7 +33,7 @@ Rectangle {
             }
 
             TabButton {
-                text: "Spatial"
+                text: SettingsLabels.t("cognition.tabSpatial")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -43,7 +44,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Décisions"
+                text: SettingsLabels.t("cognition.tabDecisions")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -54,7 +55,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Explications"
+                text: SettingsLabels.t("cognition.tabExplanations")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -65,7 +66,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Prédictions"
+                text: SettingsLabels.t("cognition.tabPredictions")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -92,7 +93,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Représentation de l'espace"
+                        text: SettingsLabels.t("cognition.spaceRepresentation")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -173,7 +174,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Arbre de décisions"
+                        text: SettingsLabels.t("cognition.decisionTree")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -283,7 +284,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Explications du raisonnement"
+                        text: SettingsLabels.t("cognition.explanations")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -340,7 +341,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Prédictions futures"
+                        text: SettingsLabels.t("cognition.predictions")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent

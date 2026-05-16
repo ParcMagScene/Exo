@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  FloorPlanProperties — panneau de propriétés dynamique
@@ -122,7 +123,7 @@ Rectangle {
         // ══════ No selection ══════
         Text {
             visible: selCount === 0
-            text: "Sélectionnez un élément\npour voir ses propriétés."
+            text: SettingsLabels.t("floorplan.selectElement")
             font.pixelSize: Theme.fontSmall
             color: Theme.textMuted
             wrapMode: Text.WordWrap
@@ -376,7 +377,7 @@ Rectangle {
                     border.color: Theme.border
                     Text {
                         anchors.centerIn: parent
-                        text: "Délier l'appareil"
+                        text: SettingsLabels.t("floorplan.unlinkDevice")
                         font.pixelSize: Theme.fontMicro
                         color: Theme.textSecondary
                     }
@@ -478,7 +479,7 @@ Rectangle {
             spacing: Theme.spacing8
 
             Text {
-                text: "Sélectionner un appareil"
+                text: SettingsLabels.t("floorplan.selectDevice")
                 font.pixelSize: Theme.fontH3
                 font.weight: Font.SemiBold
                 color: Theme.textPrimary
@@ -487,7 +488,7 @@ Rectangle {
             TextField {
                 id: deviceSearchField
                 Layout.fillWidth: true
-                placeholderText: "Rechercher…"
+                placeholderText: SettingsLabels.t("common.search")
                 font.pixelSize: Theme.fontSmall
                 color: Theme.textPrimary
                 background: Rectangle {

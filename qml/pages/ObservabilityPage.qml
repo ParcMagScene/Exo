@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
 import "../components"
+import "../core"
 
 // ═══════════════════════════════════════════════════════════════
 //  ObservabilityPage — Fusion Logs + Metrics + Traces + Health
@@ -19,8 +20,8 @@ Rectangle {
 
         // ── Header ──
         ExoPanelHeader {
-            title: "OBSERVABILITÉ"
-            subtitle: "Logs, Métriques, Traces & Santé des services"
+            title: SettingsLabels.t("observability.title")
+            subtitle: SettingsLabels.t("observability.subtitle")
         }
 
         // ── Onglets ──
@@ -34,7 +35,7 @@ Rectangle {
             }
 
             TabButton {
-                text: "Logs"
+                text: SettingsLabels.t("observability.tabLogs")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -45,7 +46,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Métriques"
+                text: SettingsLabels.t("observability.tabMetrics")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -56,7 +57,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Traces"
+                text: SettingsLabels.t("observability.tabTraces")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -67,7 +68,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Santé"
+                text: SettingsLabels.t("observability.tabHealth")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -100,7 +101,7 @@ Rectangle {
                         Layout.fillWidth: true
 
                         TextField {
-                            placeholderText: "Filtrer logs..."
+                            placeholderText: SettingsLabels.t("observability.filterLogs")
                             Layout.fillWidth: true
                             background: Rectangle {
                                 color: Theme.bgSecondary
@@ -111,7 +112,7 @@ Rectangle {
                         }
 
                         ExoButton {
-                            text: "Effacer"
+                            text: SettingsLabels.t("common.clear")
                             onClicked: console.log("[Observability] Clearing logs")
                         }
                     }
@@ -207,7 +208,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "CPU"
+                                    text: SettingsLabels.t("observability.cpu")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
@@ -245,7 +246,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "Mémoire"
+                                    text: SettingsLabels.t("observability.memory")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
@@ -283,7 +284,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "Latence STT"
+                                    text: SettingsLabels.t("observability.latencySTT")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
@@ -315,7 +316,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "Latence LLM"
+                                    text: SettingsLabels.t("observability.latencyLLM")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
@@ -347,7 +348,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Timeline du Pipeline"
+                        text: SettingsLabels.t("observability.timeline")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -424,7 +425,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "État des Services"
+                        text: SettingsLabels.t("observability.servicesHealth")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -473,7 +474,7 @@ Rectangle {
                                         }
 
                                         Text {
-                                            text: "STT Server"
+                                            text: SettingsLabels.t("observability.sttServer")
                                             font.family: Theme.fontMono
                                             font.pixelSize: Theme.fontSmall
                                             color: Theme.textPrimary
@@ -512,7 +513,7 @@ Rectangle {
                                         }
 
                                         Text {
-                                            text: "Wakeword Server"
+                                            text: SettingsLabels.t("observability.wakewordServer")
                                             font.family: Theme.fontMono
                                             font.pixelSize: Theme.fontSmall
                                             color: Theme.textPrimary
@@ -551,7 +552,7 @@ Rectangle {
                                         }
 
                                         Text {
-                                            text: "Memory Service"
+                                            text: SettingsLabels.t("observability.memoryService")
                                             font.family: Theme.fontMono
                                             font.pixelSize: Theme.fontSmall
                                             color: Theme.textPrimary
@@ -560,7 +561,7 @@ Rectangle {
                                         Item { Layout.fillWidth: true }
 
                                         Text {
-                                            text: "Timeout"
+                                            text: SettingsLabels.t("observability.timeout")
                                             font.family: Theme.fontMono
                                             font.pixelSize: Theme.fontMicro
                                             color: Theme.textSecondary

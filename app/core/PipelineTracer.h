@@ -121,6 +121,10 @@ private:
     // Seuils d'anomalie (ms)
     qint64 m_sttThreshold   = 5000;
     qint64 m_llmThreshold   = 15000;
-    qint64 m_ttsThreshold   = 10000;
-    qint64 m_totalThreshold = 30000;
+    // STABILISATION v10 2026-05-16 : seuils releves pour reponses LLM longues
+    // (recits, explications). Avant 10s/30s -> warnings systematiques des qu'on
+    // depasse 5-7 phrases. Le streaming Orpheus produit ~3.5s d'audio par phrase
+    // donc 8 phrases = 28s normal. 30s/60s laisse 2x de marge avant alerte.
+    qint64 m_ttsThreshold   = 60000;
+    qint64 m_totalThreshold = 60000;
 };

@@ -265,7 +265,7 @@ bool VisionMemory::loadFromFile(const QString &path)
     QJsonParseError err;
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
     if (err.error != QJsonParseError::NoError) {
-        qWarning() << "[VisionMemory] Parse error:" << err.errorString();
+        qWarning() << "[VisionMemory] Erreur de parsing :" << err.errorString();
         return false;
     }
 
@@ -273,7 +273,7 @@ bool VisionMemory::loadFromFile(const QString &path)
     for (const auto &val : doc.array()) {
         m_incidents.append(VisionIncident::fromVariant(val.toObject().toVariantMap()));
     }
-    qDebug() << "[VisionMemory] Loaded" << m_incidents.size() << "incidents from" << path;
+    qDebug() << "[VisionMemory] Chargé" << m_incidents.size() << "incidents depuis" << path;
     return true;
 }
 

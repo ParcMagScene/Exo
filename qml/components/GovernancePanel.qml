@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  GovernancePanel — Règles, validations, compliance, audit
@@ -74,7 +75,7 @@ Rectangle {
             Layout.fillWidth: true
 
             Text {
-                text: "GOVERNANCE"
+                text: SettingsLabels.t("comp.governance")
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontMicro
                 font.weight: Font.Bold
@@ -115,7 +116,7 @@ Rectangle {
                 model: [
                     { label: "Règles",      idx: 0 },
                     { label: "Validations", idx: 1 },
-                    { label: "Audit Log",   idx: 2 }
+                    { label: "Journal d'audit",   idx: 2 }
                 ]
 
                 Rectangle {
@@ -277,7 +278,7 @@ Rectangle {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Aucune validation enregistrée"
+                    text: SettingsLabels.t("comp.governanceNoValidation")
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSmall
                     color: Theme.textMuted
@@ -353,7 +354,7 @@ Rectangle {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "Aucune entrée d'audit"
+                    text: SettingsLabels.t("comp.governanceNoAudit")
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSmall
                     color: Theme.textMuted

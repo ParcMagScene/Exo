@@ -132,7 +132,18 @@ void AudioAnomalyDetector::onPop(int samples, int ringFreeBytes)
     m_ringFreeBytes.store(ringFreeBytes, std::memory_order_relaxed);
 
     // Underflow implicite : pop a 0 sample (le ring n'a rien donne).
+    // AUDIT AUDIO 2026-05-04 : ne PAS flagger un underflow si le ring est
+    // encore largement rempli (ringFreeBytes faible = beaucoup de donnees
+    // bufferisees) -- ce pop a vide arrive sur fin de phrase legitime ou
+    // entre 2 phrases (silence intentionnel), pas un underflow audible.
+    // Capacite ring par defaut = 1 MiB ; seuil "largement rempli" = >50%.
     if (samples <= 0) {
+        constexpr int kRingNearlyFullThreshold = 524288; // ringFree < ce seuil -> >50% rempli
+        if (ringFreeBytes >= 0 && ringFreeBytes < kRingNearlyFullThreshold) {
+            // Ring bien fourni : pop a vide est un faux positif (transition
+            // pause / silence inter-phrase / debut prebuf). On ne flag pas.
+            return;
+        }
         m_underflowCount.fetch_add(1, std::memory_order_relaxed);
         flag(Anomaly::Underflow);
         char buf[160];
@@ -162,19 +173,24 @@ void AudioAnomalyDetector::onPop(int samples, int ringFreeBytes)
         const double driftAbs = std::fabs(deltaUs / 1000.0);
 
         // Jitter spike (ecart pop-to-pop par rapport a l'attendu)
-        if (driftAbs > JITTER_THRESHOLD_MS) {
+        // AUDIT AUDIO 2026-05-04 : ne flag que si le ring est sous-rempli
+        // (free > 75% capacite = <25% audio buffer restant) -- sinon le pop
+        // tardif n'a aucune consequence audible (buffer absorbe).
+        constexpr int kRingLowWaterFree = 786432; // > 75% capacite libre
+        const bool ringStarving = (ringFreeBytes < 0) || (ringFreeBytes > kRingLowWaterFree);
+        if (driftAbs > JITTER_THRESHOLD_MS && ringStarving) {
             m_jitterSpikeCount.fetch_add(1, std::memory_order_relaxed);
             flag(Anomaly::JitterSpike);
             char buf[160];
             std::snprintf(buf, sizeof(buf),
-                "[ANOMALY] jitter spike | jitter=%.2f ms | dt=%.2f ms",
-                driftAbs, dtMs);
+                "[ANOMALY] jitter spike | jitter=%.2f ms | dt=%.2f ms | free=%d",
+                driftAbs, dtMs, ringFreeBytes);
             hWarning(exoVoice) << buf;
         }
 
         const double absDriftCumMs =
             std::fabs(static_cast<double>(m_driftUs.load(std::memory_order_relaxed)) / 1000.0);
-        if (absDriftCumMs > DRIFT_THRESHOLD_MS) {
+        if (absDriftCumMs > DRIFT_THRESHOLD_MS && ringStarving) {
             flag(Anomaly::DriftExcess);
             // log throttled : seul flush periodique le rapporte pour eviter le spam.
         }

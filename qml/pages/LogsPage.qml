@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════════════
 //  LogsPage — Visualiseur complet des logs runtime EXO
@@ -131,7 +132,7 @@ Rectangle {
             Layout.fillWidth: true
             spacing: Theme.spacing12
             Text {
-                text: "Logs runtime"
+                text: SettingsLabels.t("logs.title")
                 color: Theme.textPrimary
                 font.family: Theme.fontMono
                 font.pixelSize: 18
@@ -171,7 +172,7 @@ Rectangle {
                     Text {
                         anchors.fill: parent
                         verticalAlignment: Text.AlignVCenter
-                        text: "Filtrer (texte, catégorie, message)…"
+                        text: SettingsLabels.t("logs.filterPlaceholder")
                         color: Theme.textMuted
                         font: parent.font
                         visible: !filterField.text && !filterField.activeFocus
@@ -214,7 +215,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
 
             CheckBox {
-                text: "Auto-scroll"
+                text: SettingsLabels.t("logs.autoScroll")
                 checked: root.autoScroll
                 onToggled: root.autoScroll = checked
                 contentItem: Text {
@@ -234,7 +235,7 @@ Rectangle {
             }
 
             Button {
-                text: "Copier tout"
+                text: SettingsLabels.t("logs.copyAll")
                 Layout.preferredHeight: 30
                 onClicked: {
                     var lines = []
@@ -246,7 +247,7 @@ Rectangle {
             }
 
             Button {
-                text: "Vider"
+                text: SettingsLabels.t("logs.clear")
                 Layout.preferredHeight: 30
                 onClicked: {
                     if (typeof logManager !== 'undefined') logManager.clearLogs()
@@ -256,7 +257,7 @@ Rectangle {
             }
 
             Button {
-                text: "Rafraîchir"
+                text: SettingsLabels.t("logs.refresh")
                 Layout.preferredHeight: 30
                 onClicked: root.reload()
             }
@@ -273,7 +274,7 @@ Rectangle {
                 anchors.leftMargin: 8; anchors.rightMargin: 8
                 spacing: 0
                 Text {
-                    text: "TIMESTAMP"; Layout.preferredWidth: 180
+                    text: SettingsLabels.t("logs.colTimestamp"); Layout.preferredWidth: 180
                     color: Theme.textSecondary; font.family: Theme.fontMono
                     font.pixelSize: Theme.fontMicro; font.bold: true
                     MouseArea {
@@ -282,7 +283,7 @@ Rectangle {
                     }
                 }
                 Text {
-                    text: "NIVEAU"; Layout.preferredWidth: 70
+                    text: SettingsLabels.t("logs.colLevel"); Layout.preferredWidth: 70
                     color: Theme.textSecondary; font.family: Theme.fontMono
                     font.pixelSize: Theme.fontMicro; font.bold: true
                     MouseArea {
@@ -291,7 +292,7 @@ Rectangle {
                     }
                 }
                 Text {
-                    text: "CATÉGORIE"; Layout.preferredWidth: 110
+                    text: SettingsLabels.t("logs.colCategory"); Layout.preferredWidth: 110
                     color: Theme.textSecondary; font.family: Theme.fontMono
                     font.pixelSize: Theme.fontMicro; font.bold: true
                     MouseArea {
@@ -300,7 +301,7 @@ Rectangle {
                     }
                 }
                 Text {
-                    text: "MESSAGE"; Layout.fillWidth: true
+                    text: SettingsLabels.t("logs.colMessage"); Layout.fillWidth: true
                     color: Theme.textSecondary; font.family: Theme.fontMono
                     font.pixelSize: Theme.fontMicro; font.bold: true
                     MouseArea {
@@ -407,14 +408,14 @@ Rectangle {
                 id: rowMenu
                 property string rawText: ""
                 MenuItem {
-                    text: "Copier la ligne"
+                    text: SettingsLabels.t("logs.copyRow")
                     onTriggered: {
                         if (typeof logManager !== 'undefined')
                             logManager.copyToClipboard(rowMenu.rawText)
                     }
                 }
                 MenuItem {
-                    text: "Filtrer sur cette catégorie"
+                    text: SettingsLabels.t("logs.filterCategory")
                     onTriggered: {
                         var m = rowMenu.rawText.match(/\[[^\]]+\]\s+\S+\s+\[([^\]]+)\]/)
                         if (m && m[1]) { filterField.text = m[1]; }
@@ -425,7 +426,7 @@ Rectangle {
 
         // ── Footer hint ──
         Text {
-            text: "Double-clic = copier la ligne · Clic droit = menu · Clic en-tête = trier"
+            text: SettingsLabels.t("logs.help")
             color: Theme.textMuted
             font.family: Theme.fontMono
             font.pixelSize: Theme.fontMicro

@@ -17,6 +17,7 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QFile>
+#include <QSet>
 #include <QtEndian>
 #include <algorithm>
 #include <cstring>
@@ -507,27 +508,46 @@ void TTSWorker::init(const QString &pythonWsUrl)
     qWarning() << "[TTS] XTTS non compilé (ENABLE_XTTS=OFF) — mode Qt-only";
 #endif
 
-    // Create Qt TTS backend — priority 2 (fallback)
+    // Create Qt TTS backend — DESACTIVE (patch anti-XTTS) : on n'enregistre
+    // plus le backend Qt SAPI dans la chaine. Orpheus est le seul backend
+    // autorise ; en cas d'echec, on log ERROR et on s'arrete (pas de
+    // bascule vers une voix Windows degradee).
     m_qtBackend = new TTSBackendQt(this);
     m_qtBackend->setCancelled(&m_cancelled);
     m_qtBackend->init();
-    connect(m_qtBackend, &TTSBackend::started,  this, &TTSWorker::started);
-    connect(m_qtBackend, &TTSBackend::chunk,    this, &TTSWorker::chunk);
-    connect(m_qtBackend, &TTSBackend::finished, this, &TTSWorker::finished);
-    connect(m_qtBackend, &TTSBackend::error,    this, &TTSWorker::error);
     connect(m_qtBackend, &TTSBackendQt::voiceInfo, this, &TTSWorker::voiceInfo);
-    m_backends.append(m_qtBackend);
+    // INTENTIONNEL : pas de m_backends.append(m_qtBackend)
+    // INTENTIONNEL : pas de connect started/chunk/finished/error
 
-    qInfo() << "[TTS] Worker init:" << m_backends.size() << "backends registered";
+    qInfo() << "[TTS] Worker init:" << m_backends.size() << "backend(s) Orpheus actif(s) ; Qt SAPI desactive";
+    qInfo() << "[TTS] Backends actifs: Orpheus uniquement (XTTS desactive au niveau code)";
+}
+
+// Patch anti-XTTS : toute voix XTTS heritee (pierre/amelie/marie) est
+// remappee silencieusement vers la voix logique unique "orpheus". Le
+// serveur Python (services/orpheus/server_ws.py) se charge ensuite de
+// resoudre "orpheus" vers le token GGUF reel.
+static QString remapLegacyVoice(const QString &name)
+{
+    static const QSet<QString> kLegacy = { QStringLiteral("pierre"),
+                                           QStringLiteral("amelie"),
+                                           QStringLiteral("marie") };
+    const QString trimmed = name.trimmed().toLower();
+    if (kLegacy.contains(trimmed)) {
+        qInfo() << "[TTS] Voix legacy XTTS" << name << "-> remappee vers 'orpheus'";
+        return QStringLiteral("orpheus");
+    }
+    return name;
 }
 
 void TTSWorker::setVoice(const QString &name)
 {
+    const QString safe = remapLegacyVoice(name);
     if (m_qtBackend)
-        m_qtBackend->setVoice(name);
+        m_qtBackend->setVoice(safe);
 #ifdef ENABLE_XTTS
     if (m_xttsBackend)
-        m_xttsBackend->setVoice(name);
+        m_xttsBackend->setVoice(safe);
 #endif
 }
 
@@ -568,8 +588,12 @@ void TTSWorker::processRequest(const TTSRequest &req)
     m_cancelled = false;
 
     // Iterate backends in priority order
+    // Patch anti-XTTS : on remappe le nom de classe historique TTSBackendXTTS -> TTSBackendOrpheus
+    // dans les logs (la classe C++ est conservée pour compatibilité ABI mais elle EST le client Orpheus).
     for (TTSBackend *backend : m_backends) {
-        const QString backendName = QString::fromLatin1(backend->metaObject()->className());
+        QString backendName = QString::fromLatin1(backend->metaObject()->className());
+        if (backendName == QLatin1String("TTSBackendXTTS"))
+            backendName = QStringLiteral("TTSBackendOrpheus");
         if (!backend->isAvailable()) {
             qWarning() << "[TTS] Backend indisponible:" << backendName;
             continue;
@@ -1138,16 +1162,21 @@ void TTSManager::onWorkerFinished()
     }
 #endif
 
-    // Apply fade-out to tail of ring buffer to prevent end-of-speech click
-    const int fadeBytes = SAMPLE_RATE * 10 / 1000 * static_cast<int>(sizeof(int16_t)); // 10ms
-    m_ringBuffer.fadeOutTail(fadeBytes);
-    hVoice() << "fade_out_applied — 10ms tail";
-
     // Check if more sentences are queued → chain seamlessly
     bool hasMore = false;
     {
         QMutexLocker lk(&m_queueMutex);
         hasMore = !m_queue.isEmpty();
+    }
+
+    // AUDIT AUDIO 2026-05-04 : ne PAS appliquer fadeOutTail entre 2 phrases
+    // chainees -- ca fade les 10 derniers ms d'audio deja pousse dans le ring,
+    // puis on enchaine direct avec la phrase suivante = dip de volume audible
+    // a la jonction. On ne fade QUE sur la derniere phrase de la sequence.
+    if (!hasMore) {
+        const int fadeBytes = SAMPLE_RATE * 10 / 1000 * static_cast<int>(sizeof(int16_t)); // 10ms
+        m_ringBuffer.fadeOutTail(fadeBytes);
+        hVoice() << "fade_out_applied — 10ms tail (last sentence)";
     }
 
     if (hasMore) {
@@ -1546,13 +1575,14 @@ void TTSManager::feedRingBuffer(const QByteArray &pcm)
         // 1800 ms couvre ~10 s de phrase sans craquements (cas typique).
         // Au-dela, des micro-coupures resteront possibles sauf a accelerer
         // le moteur (rate plus eleve, GGUF Q4, n_threads++, draft model).
-        // AUDIT LATENCE 2026-05-03 : prebuf configurable via EXO_TTS_PREBUF_MS
-        // (defaut conserve a 1800 ms pour zero regression). Reduire a 600 ms
-        // gagne ~1200 ms sur la latence percue mais peut reintroduire des
-        // craquements sur phrases longues si Orpheus jitter > 400 ms.
+        // AUDIT AUDIO 2026-05-04 : prebuf reduit a 600 ms (defaut) pour gagner
+        // ~1200 ms de latence percue tout en restant au-dessus du pire jitter
+        // Orpheus observe (~400 ms). Le warmup pad WASAPI + le silence-fill
+        // anti-click cote sink couvrent les micro-dips. Override possible via
+        // EXO_TTS_PREBUF_MS (range 100..5000).
         static const int s_prebufMs = []() {
             const int v = qEnvironmentVariableIntValue("EXO_TTS_PREBUF_MS");
-            return (v >= 100 && v <= 5000) ? v : 1800;
+            return (v >= 100 && v <= 5000) ? v : 600;
         }();
         const int prebufBytes = bps * s_prebufMs / 1000;
         if (m_rtPrebufStage.size() >= prebufBytes) {
@@ -1562,10 +1592,22 @@ void TTSManager::feedRingBuffer(const QByteArray &pcm)
     }
 #endif
 
-    const int written = m_ringBuffer.write(pcm.constData(), pcm.size());
-    if (written < pcm.size()) {
-        hWarning(exoVoice) << "ringbuffer_write OVERFLOW — lost"
-                           << (pcm.size() - written) << "bytes";
+    // AUDIT AUDIO 2026-05-04 : ecrire le ring par sous-blocs ~80 ms pour
+    // matcher la cadence du callback RtAudio (40 ms) et eviter qu'un gros
+    // chunk Orpheus (>200 ms) bloque le writer une fraction de seconde en
+    // creant un vide cote reader -> jitter spike artificiel.
+    const int bpsCap = std::max(1, outputBytesPerSecond());
+    const int subBlockBytes = std::max(2, (bpsCap * 80) / 1000);
+    int offset = 0;
+    while (offset < pcm.size()) {
+        const int chunk = std::min<int>(subBlockBytes, static_cast<int>(pcm.size()) - offset);
+        const int written = m_ringBuffer.write(pcm.constData() + offset, chunk);
+        if (written < chunk) {
+            hWarning(exoVoice) << "ringbuffer_write OVERFLOW — lost"
+                               << (chunk - written) << "bytes";
+            break;
+        }
+        offset += written;
     }
 }
 
@@ -1690,7 +1732,7 @@ void TTSManager::onSinkStateChanged(QAudio::State state)
 {
     // Persistent sink — log state changes but don't trigger finalization
     if (state == QAudio::StoppedState && m_sink && m_sink->error() != QAudio::NoError) {
-        hWarning(exoVoice) << "Sink erreur:" << m_sink->error() << "— tentative recréation";
+        hWarning(exoVoice) << "Erreur sink :" << m_sink->error() << "— tentative recréation";
         m_sink.reset();
         m_sinkIO = nullptr;
         // Recreate on next speech
@@ -1811,7 +1853,7 @@ void TTSManager::setPythonUrl(const QString &url)
 void TTSManager::fetchAvailableVoices()
 {
     if (m_ttsServerUrl.isEmpty()) {
-        qWarning() << "[TTS] fetchAvailableVoices: no server URL";
+        qWarning() << "[TTS] fetchAvailableVoices : aucune URL serveur";
         return;
     }
     if (m_voiceFetchInFlight) {
@@ -1853,6 +1895,17 @@ void TTSManager::fetchAvailableVoices()
                 if (!id.isEmpty() && !voices.contains(id))
                     voices << id;
             }
+            // Patch anti-XTTS : on ne laisse passer que la voix logique
+            // "orpheus". Toute autre voix (pierre/amelie/marie, restes de
+            // XTTS) est filtree pour ne jamais apparaitre dans la GUI.
+            QStringList filtered;
+            for (const QString &v : voices) {
+                if (v.compare(QStringLiteral("orpheus"), Qt::CaseInsensitive) == 0)
+                    filtered << QStringLiteral("orpheus");
+            }
+            if (filtered.isEmpty())
+                filtered << QStringLiteral("orpheus");
+            voices = filtered;
             if (voices != m_ttsVoices) {
                 m_ttsVoices = voices;
                 emit ttsVoicesChanged();
@@ -1866,7 +1919,7 @@ void TTSManager::fetchAvailableVoices()
 
     connect(ws, &QWebSocket::errorOccurred, this, [this, ws](QAbstractSocket::SocketError err) {
         Q_UNUSED(err)
-        qWarning() << "[TTS] fetchAvailableVoices error:" << ws->errorString();
+        qWarning() << "[TTS] Erreur fetchAvailableVoices :" << ws->errorString();
         m_voiceFetchInFlight = false;
         ws->deleteLater();
     });

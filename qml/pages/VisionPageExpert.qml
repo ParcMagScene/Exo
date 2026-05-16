@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
 import "../components"
+import "../core"
 
 // ═══════════════════════════════════════════════════════════════
 //  VisionPageExpert — Fusion Vision panels (Camera, Heatmap, etc.)
@@ -19,8 +20,8 @@ Rectangle {
 
         // ── Header ──
         ExoPanelHeader {
-            title: "VISION"
-            subtitle: "Camera Feed, Heatmap, Détections & Risques"
+            title: SettingsLabels.t("vision.title")
+            subtitle: SettingsLabels.t("vision.subtitle")
         }
 
         // ── Onglets ──
@@ -34,7 +35,7 @@ Rectangle {
             }
 
             TabButton {
-                text: "Camera"
+                text: SettingsLabels.t("vision.tabCamera")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -45,7 +46,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Heatmap"
+                text: SettingsLabels.t("vision.tabHeatmap")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -56,7 +57,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Détections"
+                text: SettingsLabels.t("vision.tabDetections")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -67,7 +68,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Risques"
+                text: SettingsLabels.t("vision.tabRisks")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -78,7 +79,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Événements"
+                text: SettingsLabels.t("vision.tabEvents")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -129,7 +130,7 @@ Rectangle {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "📹 Camera Feed"
+                                    text: "📹 Flux caméra"
                                     font.pixelSize: Theme.fontLarge
                                     color: Theme.textSecondary
                                 }
@@ -139,11 +140,11 @@ Rectangle {
                                 spacing: Theme.spacing8
 
                                 ExoButton {
-                                    text: "▶ Start"
+                                    text: "▶ Démarrer"
                                 }
 
                                 ExoButton {
-                                    text: "⏹ Stop"
+                                    text: "⏹ Arrêter"
                                 }
 
                                 Item { Layout.fillWidth: true }
@@ -172,7 +173,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Heatmap d'activité"
+                        text: SettingsLabels.t("vision.heatmapTitle")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -199,7 +200,7 @@ Rectangle {
 
                             Text {
                                 anchors.centerIn: parent
-                                text: "Heatmap"
+                                text: SettingsLabels.t("vision.tabHeatmap")
                                 font.pixelSize: Theme.fontLarge
                                 color: "#ffffff"
                                 opacity: 0.3
@@ -219,7 +220,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Objets détectés"
+                        text: SettingsLabels.t("vision.detectedObjects")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -265,7 +266,7 @@ Rectangle {
                                         }
 
                                         Text {
-                                            text: "Personne"
+                                            text: SettingsLabels.t("vision.person")
                                             font.family: Theme.fontMono
                                             font.pixelSize: Theme.fontSmall
                                             color: Theme.textPrimary
@@ -301,7 +302,7 @@ Rectangle {
                                         }
 
                                         Text {
-                                            text: "Voiture"
+                                            text: SettingsLabels.t("vision.car")
                                             font.family: Theme.fontMono
                                             font.pixelSize: Theme.fontSmall
                                             color: Theme.textPrimary
@@ -358,14 +359,14 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "Incendie"
+                                    text: SettingsLabels.t("vision.fire")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
                                 }
 
                                 Text {
-                                    text: "Faible"
+                                    text: SettingsLabels.t("vision.low")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontLarge
                                     color: Theme.success
@@ -393,14 +394,14 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "Intrusion"
+                                    text: SettingsLabels.t("vision.intrusion")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
                                 }
 
                                 Text {
-                                    text: "Critique"
+                                    text: SettingsLabels.t("vision.critical")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontLarge
                                     color: Theme.error
@@ -429,7 +430,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Événements vidéo"
+                        text: SettingsLabels.t("vision.videoEvents")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent

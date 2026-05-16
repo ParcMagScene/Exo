@@ -214,6 +214,8 @@ qt_policy(SET QTP0004 OLD)
 # Theme singleton property
 set_source_files_properties(qml/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/navigation/MenuStructure.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/core/UIState.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/core/SettingsLabels.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 # Module QML
 qt_add_qml_module(RaspberryAssistant
@@ -270,6 +272,7 @@ qt_add_qml_module(RaspberryAssistant
         qml/components/VoicePipelineView.qml
         # ── Core singletons ──
         qml/core/UIState.qml
+        qml/core/SettingsLabels.qml
         # ── Navigation ──
         qml/navigation/MenuStructure.qml
     RESOURCES

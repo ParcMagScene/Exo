@@ -49,14 +49,14 @@ void ServiceSupervisor::loadDescriptors(const QString &path)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        qWarning() << "[Supervisor] Cannot open" << path;
+        qWarning() << "[Superviseur] Impossible d'ouvrir" << path;
         return;
     }
 
     QJsonParseError err;
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
     if (err.error != QJsonParseError::NoError) {
-        qWarning() << "[Supervisor] JSON parse error:" << err.errorString();
+        qWarning() << "[Superviseur] Erreur de parsing JSON :" << err.errorString();
         return;
     }
 
@@ -67,7 +67,7 @@ void ServiceSupervisor::loadDescriptors(const QString &path)
         m_bootOrder.append(desc.name);
     }
 
-    hLog() << "[Supervisor]" << m_bootOrder.size() << "services chargés";
+    hLog() << "[Superviseur]" << m_bootOrder.size() << "services chargés";
 }
 
 // ── Boucle de boot séquentiel ───────────────────────────
@@ -78,11 +78,11 @@ void ServiceSupervisor::startNext()
         // v5.1: des services lancés en parallèle peuvent encore charger
         if (m_registry.allReady()) {
             setCurrentAction("Tous les services sont prêts");
-            hLog() << "[Supervisor] ═══ ALL SERVICES READY ═══";
+            hLog() << "[Superviseur] ═══ TOUS LES SERVICES PRÊTS ═══";
             emit allServicesReady();
         } else {
             setCurrentAction("Attente des services en cours de chargement…");
-            hLog() << "[Supervisor] Boot séquentiel terminé — attente services parallèles…";
+            hLog() << "[Superviseur] Boot séquentiel terminé — attente services parallèles…";
         }
         return;
     }
@@ -116,7 +116,7 @@ void ServiceSupervisor::launchService(const QString &name)
             quickTimeout->stop(); quickTimeout->deleteLater();
             quickProbe->close();
             quickProbe->deleteLater();
-            hLog() << "[Supervisor]" << name << "déjà en cours d'exécution";
+            hLog() << "[Superviseur]" << name << "déjà en cours d'exécution";
             // Passer directement à la phase readiness
             m_registry.setState(name, Exo::ServiceState::WaitingReady);
             probeReadiness(name);
@@ -150,7 +150,7 @@ void ServiceSupervisor::doLaunchProcess(const QString &name)
 
     QString pythonExe = pythonExeForVenv(desc.venv);
     if (pythonExe.isEmpty() || !QFile::exists(pythonExe)) {
-        qWarning() << "[Supervisor] Python introuvable pour" << name << ":" << pythonExe;
+        qWarning() << "[Superviseur] Python introuvable pour" << name << ":" << pythonExe;
         m_registry.setState(name, Exo::ServiceState::Failed);
         emit progressChanged();
         advanceToNext();
@@ -159,7 +159,7 @@ void ServiceSupervisor::doLaunchProcess(const QString &name)
 
     QString scriptPath = QDir(projectDir()).absoluteFilePath(desc.script);
     if (!QFile::exists(scriptPath)) {
-        qWarning() << "[Supervisor] Script introuvable:" << scriptPath;
+        qWarning() << "[Superviseur] Script introuvable:" << scriptPath;
         m_registry.setState(name, Exo::ServiceState::Failed);
         emit progressChanged();
         advanceToNext();
@@ -214,7 +214,7 @@ void ServiceSupervisor::doLaunchProcess(const QString &name)
     proc->start(pythonExe, processArgs);
 
     if (!proc->waitForStarted(PROCESS_START_TIMEOUT_MS)) {
-        qWarning() << "[Supervisor] Échec démarrage" << name;
+        qWarning() << "[Superviseur] Échec démarrage" << name;
         proc->deleteLater();
         m_registry.setState(name, Exo::ServiceState::Failed);
         emit progressChanged();
@@ -224,7 +224,7 @@ void ServiceSupervisor::doLaunchProcess(const QString &name)
 
     qint64 pid = proc->processId();
     m_registry.setProcess(name, proc, pid);
-    hLog() << "[Supervisor]" << name << "lancé (PID" << pid << ") — attente readiness…";
+    hLog() << "[Superviseur]" << name << "lancé (PID" << pid << ") — attente readiness…";
 
     m_registry.setState(name, Exo::ServiceState::WaitingReady);
     emit progressChanged();
@@ -267,8 +267,8 @@ void ServiceSupervisor::probeReadiness(const QString &name)
         [this, name]() {
             auto it = m_probes.find(name);
             if (it != m_probes.end() && it->poll && !it->poll->isActive()) {
-                hLog() << "[Supervisor]" << name
-                       << "readiness WS dropped — relance poll";
+                hLog() << "[Superviseur]" << name
+                       << "WS readiness perdu — relance poll";
                 it->poll->start();
             }
         });
@@ -298,7 +298,7 @@ void ServiceSupervisor::probeReadiness(const QString &name)
 
 void ServiceSupervisor::onReadinessConnected(const QString &name)
 {
-    hLog() << "[Supervisor]" << name << "WebSocket connecté — attente message ready…";
+    hLog() << "[Superviseur]" << name << "WebSocket connecté — attente message ready…";
     // Arrêter le poll, on est connecté ; reset backoff pour la prochaine perte
     auto it = m_probes.find(name);
     if (it != m_probes.end()) {
@@ -351,13 +351,13 @@ void ServiceSupervisor::onReadinessMessage(const QString &name, const QString &m
             };
             auto label = phaseLabels.value(phase, QStringLiteral("%1 en cours…"));
             setCurrentAction(label.arg(name.toUpper()));
-            hLog() << "[Supervisor]" << name << "phase:" << phaseStr;
+            hLog() << "[Superviseur]" << name << "phase:" << phaseStr;
 
             // v5.1: avancer au service suivant dès la première phase reçue
             // (le probe reste actif pour ce service)
             if (!m_advancedPast.contains(name)) {
                 m_advancedPast.insert(name);
-                hLog() << "[Supervisor]" << name
+                hLog() << "[Superviseur]" << name
                        << "phase intermédiaire — lancement du prochain service en parallèle";
                 advanceToNext();
             }
@@ -367,7 +367,7 @@ void ServiceSupervisor::onReadinessMessage(const QString &name, const QString &m
 
 void ServiceSupervisor::onReadinessTimeout(const QString &name)
 {
-    hWarning(exoMain) << "[Supervisor]" << name << "readiness timeout";
+    hWarning(exoMain) << "[Superviseur]" << name << "délai readiness dépassé";
     cleanupProbe(name);
     retryOrFail(name);
 }
@@ -378,7 +378,7 @@ void ServiceSupervisor::onServiceCrashed(const QString &name, int exitCode)
     // ne pas les traiter comme des crashs pour éviter la création de timers de retry orphelins.
     if (m_shutdownDone) return;
 
-    hWarning(exoMain) << "[Supervisor]" << name << "CRASHED (exit code" << exitCode << ")";
+    hWarning(exoMain) << "[Superviseur]" << name << "PLANTÉ (code sortie" << exitCode << ")";
     m_registry.setState(name, Exo::ServiceState::Crashed);
     emit progressChanged();
 
@@ -394,7 +394,7 @@ void ServiceSupervisor::retryOrFail(const QString &name)
     const auto &policy = entry.descriptor.retryPolicy;
 
     if (entry.retryCount >= policy.maxAttempts) {
-        hWarning(exoMain) << "[Supervisor]" << name << "— abandon après"
+        hWarning(exoMain) << "[Superviseur]" << name << "— abandon après"
                           << entry.retryCount << "tentatives";
         m_registry.setState(name, Exo::ServiceState::Failed);
         emit progressChanged();
@@ -405,7 +405,7 @@ void ServiceSupervisor::retryOrFail(const QString &name)
     m_registry.incrementRetry(name);
     int delay = policy.delayForAttempt(entry.retryCount);
 
-    hLog() << "[Supervisor]" << name << "— retry" << entry.retryCount
+    hLog() << "[Superviseur]" << name << "— retry" << entry.retryCount
            << "dans" << delay << "ms";
 
     m_registry.setState(name, Exo::ServiceState::Restarting);
@@ -442,7 +442,7 @@ void ServiceSupervisor::markReady(const QString &name)
     m_registry.setState(name, Exo::ServiceState::Ready);
     m_registry.setPhase(name, Exo::ReadinessPhase::Online);
 
-    hLog() << "[Supervisor] ✓" << name << "READY";
+    hLog() << "[Superviseur] OK" << name << "PRET";
     emit serviceReady(name);
     emit progressChanged();
 
@@ -452,7 +452,7 @@ void ServiceSupervisor::markReady(const QString &name)
         m_advancedPast.remove(name);
         if (m_registry.allReady()) {
             setCurrentAction("Tous les services sont prêts");
-            hLog() << "[Supervisor] ═══ ALL SERVICES READY ═══";
+            hLog() << "[Superviseur] ═══ TOUS LES SERVICES PRÊTS ═══";
             emit allServicesReady();
         }
     } else {
@@ -508,7 +508,7 @@ void ServiceSupervisor::shutdownAll()
     for (const QString &name : m_registry.serviceNames()) {
         auto &entry = m_registry.entry(name);
         if (entry.process && entry.process->state() != QProcess::NotRunning) {
-            hLog() << "[Supervisor] Arrêt de" << name << "(PID" << entry.pid << ")";
+            hLog() << "[Superviseur] Arrêt de" << name << "(PID" << entry.pid << ")";
             entry.process->terminate();
             procs.append(entry.process);
         }

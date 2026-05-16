@@ -35,7 +35,9 @@ AssistantCoreComponents AssistantComponentFactory::createCoreComponents(
     if (!claudeKey.isEmpty()) {
         components.claudeApi->setApiKey(claudeKey);
         components.claudeApi->setModel(configManager->getClaudeModel());
-        hClaude() << "Claude API configure avec le modele:" << configManager->getClaudeModel();
+        components.claudeApi->setFallbackModel(configManager->getClaudeFallbackModel());
+        hClaude() << "Claude API configurée avec le modèle :" << configManager->getClaudeModel()
+                  << "(fallback :" << configManager->getClaudeFallbackModel() << ")";
     } else {
         hWarning(exoClaude) << "Cle API Claude manquante - fonctionnalite desactivee";
     }
@@ -103,10 +105,10 @@ AssistantCoreComponents AssistantComponentFactory::createCoreComponents(
     if (semanticEnabled) {
         components.memoryManager->initSemanticServer(memoryUrl);
     }
-    hAssistant() << "Memory Manager initialise - memoire EXO activee";
+    hAssistant() << "Gestionnaire mémoire initialisé — mémoire EXO activée";
 
     PipelineTracer::instance();
-    hAssistant() << "PipelineTracer initialise - analyse post-interaction activee";
+    hAssistant() << "PipelineTracer initialisé — analyse post-interaction activée";
 
     components.contextCache = new ContextCache(owner);
     components.contextCache->addRefreshRule("weather", weatherCacheTtlMs);
@@ -133,7 +135,7 @@ AssistantCoreComponents AssistantComponentFactory::createCoreComponents(
         dt["day_name"] = QLocale(QLocale::French).dayName(QDate::currentDate().dayOfWeek());
         components.contextCache->set("datetime", dt, datetimeCacheTtlMs);
     }
-    hAssistant() << "ContextCache initialise avec regles de rafraichissement";
+    hAssistant() << "ContextCache initialisé avec règles de rafraîchissement";
 
     if (components.claudeApi && components.claudeApi->isReady()) {
         components.claudeApi->initWarmup();
@@ -143,7 +145,7 @@ AssistantCoreComponents AssistantComponentFactory::createCoreComponents(
     components.healthCheck = new HealthCheck(owner);
     components.healthCheck->configure(configManager);
     components.healthCheck->start(healthcheckIntervalMs);
-    hAssistant() << "HealthCheck initialise - surveillance des microservices activee";
+    hAssistant() << "HealthCheck initialisé — surveillance des microservices activée";
 
     return components;
 }

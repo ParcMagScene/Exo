@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
 import "../components"
+import "../core"
 
 // ═══════════════════════════════════════════════════════════════
 //  SimulationPageExpert — Fusion Simulation panels
@@ -18,8 +19,8 @@ Rectangle {
         spacing: 0
 
         ExoPanelHeader {
-            title: "SIMULATION"
-            subtitle: "Scénarios, Propagation & Analyse Causale"
+            title: SettingsLabels.t("simulation.title")
+            subtitle: SettingsLabels.t("simulation.subtitle")
         }
 
         TabBar {
@@ -32,7 +33,7 @@ Rectangle {
             }
 
             TabButton {
-                text: "Scénarios"
+                text: SettingsLabels.t("simulation.tabScenarios")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -43,7 +44,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Propagation"
+                text: SettingsLabels.t("simulation.tabPropagation")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -54,7 +55,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Timeline"
+                text: SettingsLabels.t("simulation.tabTimeline")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -65,7 +66,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Causalité"
+                text: SettingsLabels.t("simulation.tabCausality")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -105,7 +106,7 @@ Rectangle {
                             spacing: Theme.spacing6
 
                             Text {
-                                text: "Scénarios de simulation"
+                                text: SettingsLabels.t("simulation.scenarios")
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.fontSmall
                                 color: Theme.accent
@@ -137,7 +138,7 @@ Rectangle {
                                         Item { Layout.fillWidth: true }
 
                                         ExoButton {
-                                            text: "Lancer"
+                                            text: SettingsLabels.t("common.launch")
                                             onClicked: console.log("Scenario:", modelData)
                                         }
                                     }
@@ -160,7 +161,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Visualisation propagation"
+                        text: SettingsLabels.t("simulation.propagation")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -181,7 +182,7 @@ Rectangle {
                             spacing: Theme.spacing8
 
                             Text {
-                                text: "Overlay simulation (zones affectées)"
+                                text: SettingsLabels.t("simulation.overlay")
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.fontSmall
                                 color: Theme.textSecondary
@@ -216,7 +217,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Timeline évolution"
+                        text: SettingsLabels.t("simulation.timeline")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -304,7 +305,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Graphe causal"
+                        text: SettingsLabels.t("simulation.causalGraph")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -324,7 +325,7 @@ Rectangle {
                             spacing: Theme.spacing16
 
                             Text {
-                                text: "Cause racine"
+                                text: SettingsLabels.t("simulation.rootCause")
                                 font.family: Theme.fontMono
                                 font.pixelSize: Theme.fontSmall
                                 color: Theme.accent

@@ -86,11 +86,11 @@ class EchoService:
         did = device_id.replace("echo:", "")
         dev = self._devices.get(did)
         if not dev:
-            return {"ok": False, "error": "Device not found"}
+            return {"ok": False, "error": "Appareil introuvable"}
 
         ip = dev.get("ip", "")
         if not ip:
-            return {"ok": False, "error": "No IP configured for device"}
+            return {"ok": False, "error": "Aucune IP configurée pour l'appareil"}
 
         # Send via Echo's local API (Alexa HTTP proxy / ha-alexa-api)
         try:
@@ -114,7 +114,7 @@ class EchoService:
         did = device_id.replace("echo:", "")
         dev = self._devices.get(did)
         if not dev:
-            return {"ok": False, "error": "Device not found"}
+            return {"ok": False, "error": "Appareil introuvable"}
 
         dev["state"]["volume"] = max(0, min(100, volume))
         return {"ok": True, "state": dev["state"]}
@@ -124,7 +124,7 @@ class EchoService:
         did = device_id.replace("echo:", "")
         dev = self._devices.get(did)
         if not dev:
-            return {"ok": False, "error": "Device not found"}
+            return {"ok": False, "error": "Appareil introuvable"}
 
         if "volume" in payload:
             dev["state"]["volume"] = max(0, min(100, payload["volume"]))
@@ -182,7 +182,7 @@ async def handle_client(ws, svc: EchoService) -> None:
                 if state:
                     await ws.send(json.dumps({"ok": True, "data": state}))
                 else:
-                    await ws.send(json.dumps({"ok": False, "error": "Not found"}))
+                    await ws.send(json.dumps({"ok": False, "error": "Introuvable"}))
 
             elif action == "set_state":
                 result = await svc.set_state(

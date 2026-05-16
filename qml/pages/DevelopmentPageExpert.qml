@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
 import "../components"
+import "../core"
 
 // ═══════════════════════════════════════════════════════════════
 //  DevelopmentPageExpert — Services, Stability & Debug
@@ -23,8 +24,8 @@ Rectangle {
         spacing: 0
 
         ExoPanelHeader {
-            title: "DÉVELOPPEMENT"
-            subtitle: "Services, Stabilité & Configuration"
+            title: SettingsLabels.t("dev.title")
+            subtitle: SettingsLabels.t("dev.subtitle")
         }
 
         TabBar {
@@ -37,7 +38,7 @@ Rectangle {
             }
 
             TabButton {
-                text: "Services"
+                text: SettingsLabels.t("dev.tabServices")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -48,7 +49,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Stabilité"
+                text: SettingsLabels.t("dev.tabStability")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -59,7 +60,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Config"
+                text: SettingsLabels.t("dev.tabConfig")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -70,7 +71,7 @@ Rectangle {
                 }
             }
             TabButton {
-                text: "Debug"
+                text: SettingsLabels.t("dev.tabDebug")
                 contentItem: Text {
                     text: parent.text
                     font.family: Theme.fontMono
@@ -117,7 +118,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "PRÊTS"
+                                    text: SettingsLabels.t("dev.ready")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.success
@@ -147,7 +148,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "ÉCHOUÉS"
+                                    text: SettingsLabels.t("dev.failed")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.error
@@ -177,7 +178,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "DÉGRADÉS"
+                                    text: SettingsLabels.t("dev.degraded")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.warning
@@ -206,7 +207,7 @@ Rectangle {
                                 spacing: Theme.spacing4
 
                                 Text {
-                                    text: "TOTAL"
+                                    text: SettingsLabels.t("common.total")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.accent
@@ -225,7 +226,7 @@ Rectangle {
 
                     // Services list
                     Text {
-                        text: "État détaillé"
+                        text: SettingsLabels.t("dev.detailedState")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -323,7 +324,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Tests de stabilité"
+                        text: SettingsLabels.t("dev.stabilityTests")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -370,7 +371,7 @@ Rectangle {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "Résultats du dernier test:\n✓ PASSED (12.3s)"
+                                    text: SettingsLabels.t("dev.lastTestPassed")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontSmall
                                     color: Theme.success
@@ -395,7 +396,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Fichier de configuration"
+                        text: SettingsLabels.t("dev.configFile")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -430,14 +431,14 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: "backend=qt"
+                                    text: SettingsLabels.t("dev.cfgAudioBackend")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontMicro
                                     color: Theme.textSecondary
                                 }
 
                                 Text {
-                                    text: "agc_enabled=true"
+                                    text: SettingsLabels.t("dev.cfgAgcEnabled")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontMicro
                                     color: Theme.textSecondary
@@ -456,7 +457,7 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: "expert_mode=true"
+                                    text: SettingsLabels.t("dev.cfgExpertMode")
                                     font.family: Theme.fontMono
                                     font.pixelSize: Theme.fontMicro
                                     color: Theme.success
@@ -483,7 +484,7 @@ Rectangle {
                     spacing: Theme.spacing8
 
                     Text {
-                        text: "Outils de débogage"
+                        text: SettingsLabels.t("dev.debugTools")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontSmall
                         color: Theme.accent
@@ -540,7 +541,7 @@ Rectangle {
                                     anchors.margins: Theme.spacing12
                                     spacing: Theme.spacing8
                                     Text {
-                                        text: "État mémoire QML (synthétique)"
+                                        text: SettingsLabels.t("dev.qmlMemoryState")
                                         font.family: Theme.fontMono
                                         font.pixelSize: Theme.fontLarge
                                         color: Theme.accent
@@ -555,7 +556,7 @@ Rectangle {
                                     }
                                     ExoButton {
                                         Layout.alignment: Qt.AlignHCenter
-                                        text: "Fermer"
+                                        text: SettingsLabels.t("common.close")
                                         onClicked: memoryDumpPopup.close()
                                     }
                                 }
@@ -584,19 +585,19 @@ Rectangle {
 
                             ExoButton {
                                 Layout.fillWidth: true
-                                text: "📊 Export Metrics"
+                                text: "📊 Exporter les Métriques"
                                 onClicked: console.log("Exporting metrics")
                             }
 
                             ExoButton {
                                 Layout.fillWidth: true
-                                text: "🔧 Reset Cache"
+                                text: "🔧 Réinitialiser le Cache"
                                 onClicked: console.log("Resetting cache")
                             }
 
                             ExoButton {
                                 Layout.fillWidth: true
-                                text: "🔄 Restart All Services"
+                                text: "🔄 Redémarrer tous les services"
                                 onClicked: console.log("Restarting services")
                             }
 

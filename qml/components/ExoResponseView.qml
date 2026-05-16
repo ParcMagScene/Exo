@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../theme"
+import "../core"
 
 // ═══════════════════════════════════════════════════════
 //  ExoResponseView — Vue de réponse avec streaming
@@ -30,7 +31,7 @@ Rectangle {
                 anchors.rightMargin: Theme.spacing16
 
                 Text {
-                    text: "RÉPONSE"
+                    text: SettingsLabels.t("comp.response")
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.fontMicro
                     font.bold: true
@@ -59,7 +60,7 @@ Rectangle {
                     }
 
                     Text {
-                        text: "streaming"
+                        text: SettingsLabels.t("common.streaming")
                         font.family: Theme.fontMono
                         font.pixelSize: Theme.fontMicro
                         color: Theme.success

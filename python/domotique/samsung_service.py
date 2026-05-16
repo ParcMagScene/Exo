@@ -176,12 +176,12 @@ class SamsungService:
             })
 
         if not commands:
-            return {"ok": False, "error": "No valid commands"}
+            return {"ok": False, "error": "Aucune commande valide"}
 
         result = await self._st_post(f"devices/{did}/commands", {"commands": commands})
         if result is not None:
             return {"ok": True, "state": payload}
-        return {"ok": False, "error": "Command failed"}
+        return {"ok": False, "error": "Commande échouée"}
 
     async def apply_command(self, device_id: str, command: str,
                              **params) -> dict:
@@ -235,7 +235,7 @@ async def handle_client(ws, svc: SamsungService) -> None:
                 if state:
                     await ws.send(json.dumps({"ok": True, "data": state}))
                 else:
-                    await ws.send(json.dumps({"ok": False, "error": "Not found"}))
+                    await ws.send(json.dumps({"ok": False, "error": "Introuvable"}))
 
             elif action == "set_state":
                 result = await svc.set_state(
