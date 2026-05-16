@@ -134,7 +134,7 @@ private:
     // Classification
     static const QSet<QString> s_criticalServices;
 
-    static constexpr int kTimeoutMs         = 30000;   // 30 s – les services Python chargent des modèles lourds
+    static constexpr int kTimeoutMs         = 45000;   // 45 s – marge pour faster_whisper CPU + cascade séquentielle
     static constexpr int kLazyLoadDelayMs   = 3000;
     static constexpr int kLazyRetryIntervalMs = 5000;
     static constexpr int kMaxLazyRetries    = 3;

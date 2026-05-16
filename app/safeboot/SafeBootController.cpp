@@ -92,11 +92,12 @@ void SafeBootController::startMonitoring()
 
     initServiceStates();
 
-    // Lancer un timer par service
-    for (auto it = m_services.constBegin(); it != m_services.constEnd(); ++it) {
-        m_startTimestamps[it.key()].start();
-        startTimeoutTimer(it.key());
-    }
+    // v30.4 (2026-05-16): NE PAS armer tous les timers ici.
+    // Le superviseur démarre les services séquentiellement (chaque service attend
+    // la readiness du précédent). Si on arme les 16 timers en parallèle, ceux
+    // en fin de chaîne expirent avant même d'avoir été démarrés.
+    // Le timer de chaque service est armé dans onServiceStateChanged quand l'état
+    // bascule vers "starting" ou "waiting_ready" (déclenché par le superviseur).
 
     hLog() << "[SafeBoot] Monitoring démarré —"
            << m_services.size() << "services surveillés";
@@ -171,6 +172,17 @@ void SafeBootController::onServiceStateChanged(const QString &name,
 {
     auto it = m_services.find(name);
     if (it == m_services.end()) return;
+
+    // v30.4: armer le timer SafeBoot pour ce service quand il commence
+    // réellement à être démarré (et pas avant). Idempotent: ne fait rien si
+    // un timer existe déjà ou si le service est déjà ready.
+    if ((newState == QLatin1String("starting") ||
+         newState == QLatin1String("waiting_ready")) &&
+        it->status != SafeBoot::ServiceStatus::Ready &&
+        !m_timeoutTimers.contains(name)) {
+        m_startTimestamps[name].start();
+        startTimeoutTimer(name);
+    }
 
     if (newState == QLatin1String("ready")) {
         bool wasNotReady = (it->status != SafeBoot::ServiceStatus::Ready);
